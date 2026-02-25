@@ -1,17 +1,16 @@
 {
   "compilerOptions": {
-    "target": "ES2020",                  // moderne JS Features erlaubt
-    "module": "ESNext",                  // Node.js ESM
+    "target": "ES2020",
+    "module": "ESNext",
     "moduleResolution": "node",
-    "outDir": "dist",                     // kompiliertes JS landet hier
-    "rootDir": "src",                     // TS-Quellcode liegt hier
-    "strict": true,                        // striktes TypeScript
-    "esModuleInterop": true,               // CommonJS <-> ESModule kompatibel
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
-    "allowJs": true
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["**/*.ts", "**/*.js"],   // alles im Server-src
-  "exclude": ["node_modules", "dist"]
+  "include": ["src"],
+  "exclude": ["node_modules"]
 }
