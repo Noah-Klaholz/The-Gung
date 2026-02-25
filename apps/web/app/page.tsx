@@ -13,7 +13,8 @@ export default function LoginPage() {
         e.preventDefault();
         if (name.trim()) {
             console.log("Joined as:", name);
-            //setPlayerName(name.trim());
+            setPlayerName(name.trim());
+            router.push("/lobby")
         }
     };
 

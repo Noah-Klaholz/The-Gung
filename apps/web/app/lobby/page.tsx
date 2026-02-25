@@ -5,21 +5,26 @@ import { useRouter } from "next/navigation";
 import { socket } from "../../lib/socket";
 import { usePlayer } from "../../lib/context/playerContext"
 
-const { playerName, setLobbyId } = usePlayer();
 
 export default function LobbyPage() {
     const router = useRouter();
     const [isJoining, setIsJoining] = useState(false);
     const [joinCode, setJoinCode] = useState("");
+    const { playerName, setLobbyId } = usePlayer();
 
     const handleCreateLobby = () => {
         console.log("Create Lobby clicked");
         socket.emit("CREATE_LOBBY", { playerName }); 
+        router.push('/lobby/lobbyId');
+
     };
 
-    const handleJoinLobby = () => {
-        console.log("Join Lobby clicked");
-        socket.emit("JOIN_LOBBY", { playerName });
+    const handleJoinSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (joinCode.trim()) {
+            console.log("Joining Lobby:", joinCode);
+            socket.emit("JOIN_LOBBY", { playerName });
+        }
     };
 
     return (
@@ -53,7 +58,7 @@ export default function LobbyPage() {
                         </button>
                     </div>
                 ) : (
-                    <form onSubmit={handleJoinLobby} className="space-y-6">
+                    <form onSubmit={handleJoinSubmit} className="space-y-6">
                         <div>
                             <label htmlFor="joinCode" className="block text-xs font-medium text-neutral-400 uppercase tracking-widest mb-2">
                                 Lobby Code
