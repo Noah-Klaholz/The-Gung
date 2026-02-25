@@ -11,6 +11,7 @@ interface Player {
 }
 
 export default function RootPage() {
+
     const { playerName, setPlayerName, setLobbyId } = usePlayer();
 
     const [currentView, setCurrentView] = useState<"LOGIN" | "SELECTION" | "WAITING_ROOM">("LOGIN");
@@ -29,6 +30,14 @@ export default function RootPage() {
         if (storedName) {
             setName(storedName);
         }
+        setupSocketHandlers(setPlayers, setActiveLobbyId, setCurrentView);
+
+        return() => {
+            socket.off("LOBBY_UPDATE");
+            socket.off("LOBBY_CREATED");
+            socket.off("LOBBY_JOINED");
+            socket.off("ERROR");
+        }
     }, []);
 
     const handleLoginSubmit = (e: React.FormEvent) => {
@@ -45,11 +54,6 @@ export default function RootPage() {
     const handleCreateLobby = () => {
         console.log("Create Lobby clicked");
         socket.emit("CREATE_LOBBY", { playerName });
-
-        setActiveLobbyId("123456");
-        setLobbyId("123456");
-        initializeDummyPlayers(playerName || name.trim());
-        setCurrentView("WAITING_ROOM");
     };
 
     const handleJoinSubmit = (e: React.FormEvent) => {
@@ -58,20 +62,8 @@ export default function RootPage() {
         if (trimmedJoinCode) {
             console.log("Joining Lobby:", trimmedJoinCode);
             socket.emit("JOIN_LOBBY", { playerName, lobbyId: trimmedJoinCode });
-
-            setActiveLobbyId(trimmedJoinCode);
-            setLobbyId(trimmedJoinCode);
-            initializeDummyPlayers(playerName || name.trim());
             setCurrentView("WAITING_ROOM");
         }
-    };
-
-    const initializeDummyPlayers = (currentName: string) => {
-        setPlayers([
-            { id: "1", name: `${currentName} (Du)`, isReady: false },
-            { id: "2", name: "Player 2", isReady: true },
-            { id: "3", name: "Player 3", isReady: false },
-        ]);
     };
 
     const handleCopyCode = async () => {
@@ -274,4 +266,43 @@ export default function RootPage() {
             {currentView === "WAITING_ROOM" && renderWaitingRoomView()}
         </div>
     );
+}
+
+export function setupSocketHandlers(
+  setPlayers: React.Dispatch<React.SetStateAction<Player[]>>,
+  setActiveLobbyId: (id: string) => void,
+  setCurrentView: (view: "LOGIN" | "SELECTION" | "WAITING_ROOM") => void
+) {
+  // Prevent duplicate listeners
+  socket.off("LOBBY_UPDATE");
+  socket.off("LOBBY_CREATED");
+  socket.off("LOBBY_JOINED");
+  socket.off("ERROR");
+
+  socket.on("LOBBY_UPDATE", ({ players, status }) => {
+    console.log("Lobby update received:", players);
+
+    setPlayers(
+      players.map((p: { id: string; name: string }) => ({
+        id: p.id,
+        name: p.name,
+        isReady: false, // until backend supports ready-state
+      }))
+    );
+  });
+
+  socket.on("LOBBY_CREATED", ({ lobbyId }) => {
+    setActiveLobbyId(lobbyId);
+    setCurrentView("WAITING_ROOM");
+  });
+
+  socket.on("LOBBY_JOINED", ({ lobbyId }) => {
+    setActiveLobbyId(lobbyId);
+    setCurrentView("WAITING_ROOM");
+  });
+
+  socket.on("ERROR", ({ message }) => {
+    console.error("Socket error:", message);
+    alert(message);
+  });
 }
