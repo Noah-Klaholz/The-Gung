@@ -11,6 +11,8 @@ export default function LoginPage() {
         e.preventDefault();
         if (name.trim()) {
             console.log("Joined as:", name);
+            // Save name to localStorage for use in the lobby
+            localStorage.setItem("playerName", name.trim());
             router.push('/lobby');
         }
     };
