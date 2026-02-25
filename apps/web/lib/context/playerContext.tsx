@@ -4,6 +4,8 @@ import { createContext, useContext, useState, ReactNode } from "react";
 interface PlayerContextType {
   playerName: string;
   setPlayerName: (name: string) => void;
+  playerId: string;
+  setPlayerId: (id: string) => void;
   lobbyId?: string;
   setLobbyId: (id: string) => void;
 }
@@ -12,10 +14,11 @@ const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const [playerName, setPlayerName] = useState("");
+  const [playerId, setPlayerId] = useState("");
   const [lobbyId, setLobbyId] = useState<string | undefined>();
 
   return (
-    <PlayerContext.Provider value={{ playerName, setPlayerName, lobbyId, setLobbyId }}>
+    <PlayerContext.Provider value={{ playerName, setPlayerName, playerId, setPlayerId ,lobbyId, setLobbyId }}>
       {children}
     </PlayerContext.Provider>
   );

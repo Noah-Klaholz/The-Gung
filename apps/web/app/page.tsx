@@ -12,7 +12,7 @@ interface Player {
 }
 
 export default function RootPage() {
-  const { playerName, setPlayerName } = usePlayer();
+  const { playerName, setPlayerName, playerId, setPlayerId } = usePlayer();
 
   const [currentView, setCurrentView] = useState<
     "LOGIN" | "SELECTION" | "WAITING_ROOM"
@@ -44,6 +44,7 @@ export default function RootPage() {
       setIsJoining,
       setErrorMsg,
       setMaxPlayers,
+      setPlayerId,
     );
 
     return () => {
@@ -92,7 +93,7 @@ export default function RootPage() {
   };
 
   const handleToggleReady = () => {
-    // Optimistic UI state update. Note: Backend should eventually listen to a 'TOGGLE_READY' event
+    socket.emit("TOGGLE_READY", { joinCode, playerId})
     setPlayers((prev) =>
       prev.map((p) => (p.id === socket.id ? { ...p, isReady: !p.isReady } : p)),
     );
@@ -307,7 +308,10 @@ export default function RootPage() {
           {isCurrentUserHost && (
             <button
               disabled={!allPlayersReady}
-              onClick={() => console.log("Start Game clicked")} // To be handled by backend
+              onClick={() => {
+                socket.emit("START_GAME", joinCode)
+                console.log("Start Game clicked")} 
+              }
               className="w-full py-3 px-4 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Spiel Starten
@@ -350,6 +354,7 @@ export function setupSocketHandlers(
   setIsJoining: (joining: boolean) => void,
   setErrorMsg: (msg: string | null) => void,
   setMaxPlayers: (limit: number) => void,
+  setPlayerId: (id: string) => void,
 ) {
   // Prevent duplicate listeners
   socket.off("LOBBY_UPDATE");
@@ -381,13 +386,15 @@ export function setupSocketHandlers(
     );
   });
 
-  socket.on("LOBBY_CREATED", ({ joinCode }) => {
+  socket.on("LOBBY_CREATED", ({ joinCode, playerId }) => {
     setActiveJoinCode(joinCode);
+    setPlayerId(playerId);
     setCurrentView("WAITING_ROOM");
   });
 
-  socket.on("LOBBY_JOINED", ({ joinCode }) => {
+  socket.on("LOBBY_JOINED", ({ joinCode, playerId }) => {
     setActiveJoinCode(joinCode);
+    setPlayerId(playerId);
     setCurrentView("WAITING_ROOM");
   });
 

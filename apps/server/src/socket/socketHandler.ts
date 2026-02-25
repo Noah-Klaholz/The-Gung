@@ -51,9 +51,24 @@ export function setupSocketHandlers(io: Server) {
       if (!lobby) return;
 
       lobby.status = "playing";
+      console.log("Starting game")
 
       io.to(joinCode).emit("GAME_STARTED");
     });
+
+    socket.on("TOGGLE_READY", ({joinCode, playerId}) => {
+      const success = lobbyManager.setPlayerReady(
+        joinCode,
+        playerId,
+      );
+
+      if (!success) {
+        socket.emit("ERROR", { message: "Reconnection failed" });
+        return;
+      }
+
+      emitLobbyUpdate(io, joinCode);
+    })
   });
 }
 
@@ -66,7 +81,7 @@ function emitLobbyUpdate(io: Server, joinCode: string) {
       id: p.id,
       name: p.name,
       isHost: p.id === lobby.hostId,
-      isReady: false, // until implemented
+      isReady: p.ready,
     })),
     status: lobby.status,
   });

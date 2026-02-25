@@ -4,6 +4,7 @@ export interface Player {
   id: string;
   name: string;
   socketId?: string;
+  ready: boolean;
 }
 
 export interface Lobby {
@@ -43,6 +44,7 @@ export class LobbyManager {
       id: playerId,
       name: hostName,
       socketId,
+      ready: false,
     };
 
     const lobby: Lobby = {
@@ -69,11 +71,13 @@ export class LobbyManager {
       id: playerId,
       name: playerName,
       socketId,
+      ready: false,
     });
 
     return { lobbyId: lobby.id, joinCode, playerId };
   }
 
+  // Don't think this works yet
   reconnectPlayerByCode(joinCode: string, playerId: string, socketId: string) {
     const lobby = this.lobbiesByCode.get(joinCode);
     if (!lobby) return false;
@@ -82,6 +86,17 @@ export class LobbyManager {
     if (!player) return false;
 
     player.socketId = socketId;
+    return true;
+  }
+
+  setPlayerReady(joinCode: string, playerId: string) {
+    const lobby = this.lobbiesByCode.get(joinCode);
+    if (!lobby) return false;
+
+    const player = lobby.players.get(playerId);
+    if (!player) return false;
+
+    player.ready = !player.ready;
     return true;
   }
 
