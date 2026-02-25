@@ -3,7 +3,6 @@
 import { useState, use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-// --- TYPES ---
 // Replace or extend these types based on your backend State Manager
 interface Player {
     id: string;
@@ -17,7 +16,6 @@ export default function LobbyWaitingRoom({ params }: { params: Promise<{ lobbyId
     const resolvedParams = use(params);
     const lobbyId = resolvedParams.lobbyId;
 
-    // --- STATE ---
     // In the future, this should be synced with your backend via Socket.IO)
     const [players, setPlayers] = useState<Player[]>([
         { id: "1", name: "Lade...", isReady: false },
@@ -43,7 +41,6 @@ export default function LobbyWaitingRoom({ params }: { params: Promise<{ lobbyId
 
     const isCurrentUserReady = players[0]?.isReady ?? false;
 
-    // --- HANDLERS ---
     const handleCopyCode = async () => {
         try {
             await navigator.clipboard.writeText(lobbyId);
@@ -75,7 +72,6 @@ export default function LobbyWaitingRoom({ params }: { params: Promise<{ lobbyId
     return (
         <div className="min-h-screen bg-black flex flex-col items-center justify-center font-sans p-4 relative">
 
-            {/* Top Right: Lobby Code Container */}
             <div className="absolute top-6 right-6 flex items-center bg-neutral-900 border border-neutral-800 rounded-lg p-2 shadow-lg">
                 <button
                     onClick={handleCopyCode}
@@ -98,17 +94,13 @@ export default function LobbyWaitingRoom({ params }: { params: Promise<{ lobbyId
                     <span className="text-white font-mono tracking-wider font-semibold text-lg">{lobbyId}</span>
                 </div>
             </div>
-
-            {/* Main Content Box */}
             <div className="w-full max-w-md p-8 bg-neutral-900 border border-neutral-800 rounded-xl mt-16">
                 <h1 className="text-3xl font-bold text-white text-center mb-8 uppercase tracking-wider">
                     Waiting Room
                 </h1>
-
-                {/* Player List */}
                 <div className="space-y-3 mb-8">
                     <h2 className="text-xs font-medium text-neutral-400 uppercase tracking-widest mb-4">
-                        Players ({players.length}/4) {/* Update max players if necessary */}
+                        Players ({players.length}/6)
                     </h2>
 
                     <div className="flex flex-col gap-2">
@@ -128,8 +120,6 @@ export default function LobbyWaitingRoom({ params }: { params: Promise<{ lobbyId
                         ))}
                     </div>
                 </div>
-
-                {/* Actions */}
                 <div className="space-y-4">
                     <button
                         onClick={handleToggleReady}
