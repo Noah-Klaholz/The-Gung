@@ -5,7 +5,7 @@ const lobbyManager = new LobbyManager();
 
 export function setupSocketHandlers(io: Server) {
   io.on("connection", (socket: Socket) => {
-    console.log("Connected:", socket.id);
+    console.log(" Connected:", socket.id);
 
     socket.on("CREATE_LOBBY", ({ playerName }) => {
       const result = lobbyManager.createLobby(playerName, socket.id);
@@ -16,29 +16,25 @@ export function setupSocketHandlers(io: Server) {
       emitLobbyUpdate(io, result.lobbyId);
     });
 
-    socket.on("JOIN_LOBBY", ({ lobbyId, playerName }) => {
-      const result = lobbyManager.joinLobby(
-        lobbyId,
-        playerName,
-        socket.id
-      );
+    socket.on("JOIN_LOBBY", ({ joinCode, playerName }) => {
+      const result = lobbyManager.joinLobby(joinCode, playerName, socket.id);
 
       if (!result) {
         socket.emit("ERROR", { message: "Lobby not found" });
         return;
       }
 
-      socket.join(lobbyId);
+      socket.join(result.lobbyId);
 
       socket.emit("LOBBY_JOINED", result);
-      emitLobbyUpdate(io, lobbyId);
+      emitLobbyUpdate(io, result.lobbyId);
     });
 
     socket.on("RECONNECT_PLAYER", ({ lobbyId, playerId }) => {
       const success = lobbyManager.reconnectPlayer(
         lobbyId,
         playerId,
-        socket.id
+        socket.id,
       );
 
       if (!success) {
@@ -74,10 +70,10 @@ function emitLobbyUpdate(io: Server, lobbyId: string) {
   if (!lobby) return;
 
   io.to(lobbyId).emit("LOBBY_UPDATE", {
-    players: Array.from(lobby.players.values()).map(p => ({
+    players: Array.from(lobby.players.values()).map((p) => ({
       id: p.id,
-      name: p.name
+      name: p.name,
     })),
-    status: lobby.status
+    status: lobby.status,
   });
 }

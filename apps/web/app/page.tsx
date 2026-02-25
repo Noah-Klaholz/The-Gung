@@ -67,7 +67,7 @@ export default function RootPage() {
         const trimmedJoinCode = joinCode.trim();
         if (trimmedJoinCode) {
             console.log("Joining Lobby:", trimmedJoinCode);
-            socket.emit("JOIN_LOBBY", { playerName, lobbyId: trimmedJoinCode });
+            socket.emit("JOIN_LOBBY", { trimmedJoinCode, playerName });
             setCurrentView("WAITING_ROOM");
         }
     };
