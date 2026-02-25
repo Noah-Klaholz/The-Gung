@@ -1,3 +1,4 @@
+import { PlayerProvider } from "@/lib/context/playerContext";
 import "./globals.css";
 
 export const metadata = {
@@ -13,7 +14,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased bg-neutral-950 text-white">
-        {children}
+        <PlayerProvider>
+          {children}
+        </PlayerProvider>
       </body>
     </html>
   );

@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { usePlayer } from "../lib/context/playerContext";
+
+const { setPlayerName } = usePlayer();
 
 export default function LoginPage() {
     const [name, setName] = useState("");
@@ -11,9 +14,7 @@ export default function LoginPage() {
         e.preventDefault();
         if (name.trim()) {
             console.log("Joined as:", name);
-            // Save name to localStorage for use in the lobby
-            localStorage.setItem("playerName", name.trim());
-            router.push('/lobby');
+            setPlayerName(name.trim());
         }
     };
 

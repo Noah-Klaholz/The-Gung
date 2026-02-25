@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { socket } from "../../lib/socket";
+import { usePlayer } from "../../lib/context/playerContext"
+
+const { playerName, setLobbyId } = usePlayer();
 
 export default function LobbyPage() {
     const router = useRouter();
@@ -10,19 +14,12 @@ export default function LobbyPage() {
 
     const handleCreateLobby = () => {
         console.log("Create Lobby clicked");
-        // TODO: In the future, this should call your backend to create a lobby
-        // and get the returned lobby ID. For now, routing to a dummy ID.
-        router.push('/lobby/123456');
+        socket.emit("CREATE_LOBBY", { playerName }); 
     };
 
-    const handleJoinSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (joinCode.trim()) {
-            console.log("Joining Lobby:", joinCode);
-            // TODO: In the future, this should call your backend to join the lobby
-            // For now, we route directly to the frontend room:
-            router.push(`/lobby/${joinCode.trim()}`);
-        }
+    const handleJoinLobby = () => {
+        console.log("Join Lobby clicked");
+        socket.emit("JOIN_LOBBY", { playerName });
     };
 
     return (
