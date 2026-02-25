@@ -10,10 +10,10 @@ export function setupSocketHandlers(io: Server) {
     socket.on("CREATE_LOBBY", ({ playerName }) => {
       const result = lobbyManager.createLobby(playerName, socket.id);
 
-      socket.join(result.lobbyId);
+      socket.join(result.joinCode);
 
       socket.emit("LOBBY_CREATED", result);
-      emitLobbyUpdate(io, result.lobbyId);
+      emitLobbyUpdate(io, result.joinCode);
     });
 
     socket.on("JOIN_LOBBY", ({ joinCode, playerName }) => {
@@ -24,15 +24,15 @@ export function setupSocketHandlers(io: Server) {
         return;
       }
 
-      socket.join(result.lobbyId);
+      socket.join(result.joinCode);
 
       socket.emit("LOBBY_JOINED", result);
-      emitLobbyUpdate(io, result.lobbyId);
+      emitLobbyUpdate(io, result.joinCode);
     });
 
-    socket.on("RECONNECT_PLAYER", ({ lobbyId, playerId }) => {
-      const success = lobbyManager.reconnectPlayer(
-        lobbyId,
+    socket.on("RECONNECT_PLAYER", ({ joinCode, playerId }) => {
+      const success = lobbyManager.reconnectPlayerByCode(
+        joinCode,
         playerId,
         socket.id,
       );
@@ -42,37 +42,31 @@ export function setupSocketHandlers(io: Server) {
         return;
       }
 
-      socket.join(lobbyId);
-
-      emitLobbyUpdate(io, lobbyId);
+      socket.join(joinCode);
+      emitLobbyUpdate(io, joinCode);
     });
 
-    socket.on("START_GAME", ({ lobbyId }) => {
-      const lobby = lobbyManager.getLobby(lobbyId);
+    socket.on("START_GAME", ({ joinCode }) => {
+      const lobby = lobbyManager.getLobbyByCode(joinCode);
       if (!lobby) return;
 
       lobby.status = "playing";
 
-      // GameManager will later initialize game here
-
-      io.to(lobbyId).emit("GAME_STARTED");
-    });
-
-    socket.on("disconnect", () => {
-      console.log("Disconnected:", socket.id);
-      lobbyManager.removeSocket(socket.id);
+      io.to(joinCode).emit("GAME_STARTED");
     });
   });
 }
 
-function emitLobbyUpdate(io: Server, lobbyId: string) {
-  const lobby = lobbyManager.getLobby(lobbyId);
+function emitLobbyUpdate(io: Server, joinCode: string) {
+  const lobby = lobbyManager.getLobbyByCode(joinCode);
   if (!lobby) return;
 
-  io.to(lobbyId).emit("LOBBY_UPDATE", {
+  io.to(joinCode).emit("LOBBY_UPDATE", {
     players: Array.from(lobby.players.values()).map((p) => ({
       id: p.id,
       name: p.name,
+      isHost: p.id === lobby.hostId,
+      isReady: false, // until implemented
     })),
     status: lobby.status,
   });

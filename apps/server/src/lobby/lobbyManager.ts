@@ -42,7 +42,7 @@ export class LobbyManager {
     const host: Player = {
       id: playerId,
       name: hostName,
-      socketId
+      socketId,
     };
 
     const lobby: Lobby = {
@@ -50,7 +50,7 @@ export class LobbyManager {
       joinCode,
       players: new Map([[playerId, host]]),
       hostId: playerId,
-      status: "waiting"
+      status: "waiting",
     };
 
     this.lobbiesById.set(lobbyId, lobby);
@@ -68,14 +68,14 @@ export class LobbyManager {
     lobby.players.set(playerId, {
       id: playerId,
       name: playerName,
-      socketId
+      socketId,
     });
 
-    return { lobbyId: lobby.id, playerId };
+    return { lobbyId: lobby.id, joinCode, playerId };
   }
 
-  reconnectPlayer(lobbyId: string, playerId: string, socketId: string) {
-    const lobby = this.lobbiesById.get(lobbyId);
+  reconnectPlayerByCode(joinCode: string, playerId: string, socketId: string) {
+    const lobby = this.lobbiesByCode.get(joinCode);
     if (!lobby) return false;
 
     const player = lobby.players.get(playerId);
@@ -87,6 +87,10 @@ export class LobbyManager {
 
   getLobby(lobbyId: string) {
     return this.lobbiesById.get(lobbyId);
+  }
+
+  getLobbyByCode(joinCode: string) {
+    return this.lobbiesByCode.get(joinCode);
   }
 
   removeSocket(socketId: string) {
