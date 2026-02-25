@@ -8,6 +8,7 @@ interface Player {
     id: string;
     name: string;
     isReady: boolean;
+    isHost?: boolean;
 }
 
 export default function RootPage() {
@@ -23,16 +24,21 @@ export default function RootPage() {
 
     const [activeLobbyId, setActiveLobbyId] = useState<string | null>(null);
     const [players, setPlayers] = useState<Player[]>([]);
+
+    // Default limit is 6, will be updated via backend LOBBY_UPDATE event
+    const [maxPlayers, setMaxPlayers] = useState(6);
+
     const [copied, setCopied] = useState(false);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     useEffect(() => {
         const storedName = localStorage.getItem("playerName");
         if (storedName) {
             setName(storedName);
         }
-        setupSocketHandlers(setPlayers, setActiveLobbyId, setCurrentView);
+        setupSocketHandlers(setPlayers, setActiveLobbyId, setCurrentView, setIsJoining, setErrorMsg, setMaxPlayers);
 
-        return() => {
+        return () => {
             socket.off("LOBBY_UPDATE");
             socket.off("LOBBY_CREATED");
             socket.off("LOBBY_JOINED");
@@ -42,7 +48,7 @@ export default function RootPage() {
 
     const handleLoginSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const trimmedName = name.trim();
+        const trimmedName = name.trim().slice(0, 25);
         if (trimmedName) {
             console.log("Joined as:", trimmedName);
             localStorage.setItem("playerName", trimmedName);
@@ -78,9 +84,10 @@ export default function RootPage() {
     };
 
     const handleToggleReady = () => {
+        // Optimistic UI state update. Note: Backend should eventually listen to a 'TOGGLE_READY' event
         setPlayers((prev) =>
-            prev.map((p, index) =>
-                index === 0 ? { ...p, isReady: !p.isReady } : p
+            prev.map((p) =>
+                p.id === socket.id ? { ...p, isReady: !p.isReady } : p
             )
         );
     };
@@ -93,7 +100,11 @@ export default function RootPage() {
         setCurrentView("SELECTION");
     };
 
-    const isCurrentUserReady = players[0]?.isReady ?? false;
+    // The current user is identified by comparing player.id to socket.id
+    const currentPlayer = players.find(p => p.id === socket.id);
+    const isCurrentUserReady = currentPlayer?.isReady ?? false;
+    const isCurrentUserHost = currentPlayer?.isHost ?? false;
+    const allPlayersReady = players.length > 0 && players.every(p => p.isReady);
 
     const renderLoginView = () => (
         <div className="w-full max-w-sm p-8 bg-neutral-900 border border-neutral-800 rounded-xl">
@@ -110,6 +121,7 @@ export default function RootPage() {
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
+                        maxLength={25}
                         className="w-full bg-black border border-neutral-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-white transition-colors placeholder:text-neutral-600"
                         placeholder="Dein Name..."
                         required
@@ -169,6 +181,11 @@ export default function RootPage() {
                             required
                             autoComplete="off"
                         />
+                        {errorMsg && (
+                            <p className="text-red-500 text-xs mt-2 font-bold uppercase tracking-wider animate-pulse">
+                                {errorMsg}
+                            </p>
+                        )}
                     </div>
                     <div className="space-y-3">
                         <button
@@ -222,12 +239,15 @@ export default function RootPage() {
                 </h1>
                 <div className="space-y-3 mb-8">
                     <h2 className="text-xs font-medium text-neutral-400 uppercase tracking-widest mb-4">
-                        Players ({players.length}/6)
+                        Players ({players.length}/{maxPlayers})
                     </h2>
                     <div className="flex flex-col gap-2">
                         {players.map((player) => (
                             <div key={player.id} className="flex items-center justify-between p-3 bg-black border border-neutral-800 rounded-lg">
-                                <span className="text-white font-medium">{player.name}</span>
+                                <span className="text-white font-medium">
+                                    {player.isHost && <span className="mr-2" title="Host">👑</span>}
+                                    {player.name}
+                                </span>
                                 <span className={`text-xs uppercase font-bold tracking-wider px-2 py-1 rounded ${player.isReady
                                     ? "text-green-500 bg-green-500/10 border border-green-500/20"
                                     : "text-yellow-500 bg-yellow-500/10 border border-yellow-500/20"
@@ -239,6 +259,15 @@ export default function RootPage() {
                     </div>
                 </div>
                 <div className="space-y-4">
+                    {isCurrentUserHost && (
+                        <button
+                            disabled={!allPlayersReady}
+                            onClick={() => console.log("Start Game clicked")} // To be handled by backend
+                            className="w-full py-3 px-4 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Spiel Starten
+                        </button>
+                    )}
                     <button
                         onClick={handleToggleReady}
                         className={`w-full py-4 px-4 font-bold rounded-lg transition-colors uppercase tracking-widest ${isCurrentUserReady
@@ -269,40 +298,53 @@ export default function RootPage() {
 }
 
 export function setupSocketHandlers(
-  setPlayers: React.Dispatch<React.SetStateAction<Player[]>>,
-  setActiveLobbyId: (id: string) => void,
-  setCurrentView: (view: "LOGIN" | "SELECTION" | "WAITING_ROOM") => void
+    setPlayers: React.Dispatch<React.SetStateAction<Player[]>>,
+    setActiveLobbyId: (id: string) => void,
+    setCurrentView: (view: "LOGIN" | "SELECTION" | "WAITING_ROOM") => void,
+    setIsJoining: (joining: boolean) => void,
+    setErrorMsg: (msg: string | null) => void,
+    setMaxPlayers: (limit: number) => void
 ) {
-  // Prevent duplicate listeners
-  socket.off("LOBBY_UPDATE");
-  socket.off("LOBBY_CREATED");
-  socket.off("LOBBY_JOINED");
-  socket.off("ERROR");
+    // Prevent duplicate listeners
+    socket.off("LOBBY_UPDATE");
+    socket.off("LOBBY_CREATED");
+    socket.off("LOBBY_JOINED");
+    socket.off("ERROR");
 
-  socket.on("LOBBY_UPDATE", ({ players, status }) => {
-    console.log("Lobby update received:", players);
+    socket.on("LOBBY_UPDATE", ({ players, maxPlayers }) => {
+        console.log("Lobby update received:", players);
 
-    setPlayers(
-      players.map((p: { id: string; name: string }) => ({
-        id: p.id,
-        name: p.name,
-        isReady: false, // until backend supports ready-state
-      }))
-    );
-  });
+        if (maxPlayers) {
+            setMaxPlayers(maxPlayers);
+        }
 
-  socket.on("LOBBY_CREATED", ({ lobbyId }) => {
-    setActiveLobbyId(lobbyId);
-    setCurrentView("WAITING_ROOM");
-  });
+        setPlayers(
+            players.map((p: { id: string; name: string; isHost?: boolean; isReady?: boolean }) => ({
+                id: p.id,
+                name: p.name,
+                isReady: p.isReady || false, // until backend fully supports ready-state
+                isHost: p.isHost || false,   // wait for backend to support this properly
+            }))
+        );
+    });
 
-  socket.on("LOBBY_JOINED", ({ lobbyId }) => {
-    setActiveLobbyId(lobbyId);
-    setCurrentView("WAITING_ROOM");
-  });
+    socket.on("LOBBY_CREATED", ({ lobbyId }) => {
+        setActiveLobbyId(lobbyId);
+        setCurrentView("WAITING_ROOM");
+    });
 
-  socket.on("ERROR", ({ message }) => {
-    console.error("Socket error:", message);
-    alert(message);
-  });
+    socket.on("LOBBY_JOINED", ({ lobbyId }) => {
+        setActiveLobbyId(lobbyId);
+        setCurrentView("WAITING_ROOM");
+    });
+
+    socket.on("ERROR", ({ message }) => {
+        console.error("Socket error:", message);
+        setErrorMsg("Lobby nicht gefunden");
+        setCurrentView("SELECTION");
+        setIsJoining(true);
+        setTimeout(() => {
+            setErrorMsg(null);
+        }, 3000);
+    });
 }
