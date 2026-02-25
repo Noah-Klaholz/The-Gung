@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",                  // moderne JS Features erlaubt
+    "module": "ESNext",                  // Node.js ESM
+    "moduleResolution": "node",
+    "outDir": "dist",                     // kompiliertes JS landet hier
+    "rootDir": "src",                     // TS-Quellcode liegt hier
+    "strict": true,                        // striktes TypeScript
+    "esModuleInterop": true,               // CommonJS <-> ESModule kompatibel
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "allowJs": true
+  },
+  "include": ["**/*.ts", "**/*.js"],   // alles im Server-src
+  "exclude": ["node_modules", "dist"]
+}

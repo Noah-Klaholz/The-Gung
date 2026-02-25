@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Backend Test</title>
+</head>
+<body>
+  <button id="create">Create Lobby</button>
+
+  <script>
+    document.getElementById('create').addEventListener('click', async () => {
+      const res = await fetch('http://localhost:3000/api/lobby/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      console.log(data);
+      alert(JSON.stringify(data));
+    });
+  </script>
+</body>
+</html>
