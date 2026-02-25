@@ -6,7 +6,9 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=web",
+    "dev:server": "npm run dev --workspace=web",
+    "dev:web": "npm run dev --workspace=web",
+    "dev": "npm run dev --workspace=server & npm run dev --workspace=web",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
