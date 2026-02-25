@@ -39,12 +39,16 @@ The frontend/web workspace communicates via socket.io client with the backend/se
 
 #### Lobby
 
-| Command          | Parameters                                | Response                                 | Explanation                                                                                                                  |
-| ---------------- | ----------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| CREATE_LOBBY     | `{ playerName: string }`                  | `LOBBY_CREATED`, `LOBBY_UPDATE`          | Creates a new lobby with the given player name, joins the player to it, and emits an updated lobby state.                    |
-| JOIN_LOBBY       | `{ lobbyId: string, playerName: string }` | `LOBBY_JOINED`, `LOBBY_UPDATE` / `ERROR` | Adds a player to an existing lobby. Emits updated lobby info. If the lobby does not exist, emits an error.                   |
-| RECONNECT_PLAYER | `{ lobbyId: string, playerId: string }`   | `LOBBY_UPDATE` / `ERROR`                 | Reconnects a player to a lobby using their previous player ID. Emits updated lobby state. Emits error if reconnection fails. |
-| START_GAME       | `{ lobbyId: string }`                     | `GAME_STARTED`                           | Marks the lobby status as "playing" and emits a `GAME_STARTED` event to all players in the lobby.                            |
-| disconnect       | (none)                                    | (none)                                   | Triggered when a client disconnects. Removes the socket from all associated lobbies via `lobbyManager.removeSocket()`.       |
+**Note:** Direction means wether the frontend sends this to the server (c→s), bidirectionally (c→s/s→c) or vice versa (s→c).
+
+| Command          | Parameters                                | Response                                 | Direction | Explanation                                                                                                           |
+| ---------------- | ----------------------------------------- | ---------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------- |
+| CREATE_LOBBY     | `{ playerName: string }`                  | `LOBBY_CREATED`, `LOBBY_UPDATE`          | c→s / s→c | Creates a new lobby with the given player name, joins the player, emits lobby update to all in lobby.                 |
+| JOIN_LOBBY       | `{ lobbyId: string, playerName: string }` | `LOBBY_JOINED`, `LOBBY_UPDATE` / `ERROR` | c→s / s→c | Adds a player to an existing lobby. Emits updated lobby info. If lobby doesn’t exist, emits `ERROR`.                  |
+| RECONNECT_PLAYER | `{ lobbyId: string, playerId: string }`   | `LOBBY_UPDATE` / `ERROR`                 | c→s / s→c | Reconnects a player to a lobby using previous player ID. Emits updated lobby state. `ERROR` if reconnection fails.    |
+| START_GAME       | `{ lobbyId: string }`                     | `GAME_STARTED`                           | c→s / s→c | Marks the lobby status as "playing" and emits `GAME_STARTED` to all players in the lobby.                             |
+| disconnect       | (none)                                    | (none)                                   | c→s       | Triggered automatically on client disconnect. Removes socket from all associated lobbies.                             |
+| LOBBY_UPDATE     | (none)                                    | `{ players: [{id, name}], status }`      | s→c       | Sent whenever lobby state changes (player join, reconnect, etc.). Contains current players and status.                |
+| ERROR            | `{ message: string }`                     | (none)                                   | s→c       | Sent whenever a command fails (e.g., lobby not found, reconnection fails). Provides a message describing the failure. |
 
 #### Game
