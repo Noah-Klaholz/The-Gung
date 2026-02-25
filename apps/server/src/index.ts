@@ -13,6 +13,6 @@ const io = new Server(httpServer, {
 
 setupSocketHandlers(io);
 
-httpServer.listen(SERVER_PORT, () => {
-  console.log(`Socket server running on http://localhost:${SERVER_PORT}`);
+httpServer.listen(SERVER_PORT, "0.0.0.0", () => {
+  console.log(`Socket server running and accepting connections on port ${SERVER_PORT}`);
 });
