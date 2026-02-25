@@ -4,9 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePlayer } from "../lib/context/playerContext";
 
-const { setPlayerName } = usePlayer();
-
 export default function LoginPage() {
+    const { setPlayerName } = usePlayer();
     const [name, setName] = useState("");
     const router = useRouter();
 

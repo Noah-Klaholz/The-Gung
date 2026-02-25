@@ -53,7 +53,7 @@ export default function LobbyPage() {
                         </button>
                     </div>
                 ) : (
-                    <form onSubmit={handleJoinSubmit} className="space-y-6">
+                    <form onSubmit={handleJoinLobby} className="space-y-6">
                         <div>
                             <label htmlFor="joinCode" className="block text-xs font-medium text-neutral-400 uppercase tracking-widest mb-2">
                                 Lobby Code
