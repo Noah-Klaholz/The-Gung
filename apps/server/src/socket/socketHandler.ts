@@ -5,7 +5,7 @@ const lobbyManager = new LobbyManager();
 
 export function setupSocketHandlers(io: Server) {
   io.on("connection", (socket: Socket) => {
-    console.log("🔌 Connected:", socket.id);
+    console.log("Connected:", socket.id);
 
     socket.on("CREATE_LOBBY", ({ playerName }) => {
       const result = lobbyManager.createLobby(playerName, socket.id);
@@ -63,7 +63,7 @@ export function setupSocketHandlers(io: Server) {
     });
 
     socket.on("disconnect", () => {
-      console.log("❌ Disconnected:", socket.id);
+      console.log("Disconnected:", socket.id);
       lobbyManager.removeSocket(socket.id);
     });
   });
