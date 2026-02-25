@@ -7,6 +7,7 @@ import { usePlayer } from "../../lib/context/playerContext"
 
 
 export default function LobbyPage() {
+
     const router = useRouter();
     const [isJoining, setIsJoining] = useState(false);
     const [joinCode, setJoinCode] = useState("");
@@ -16,7 +17,6 @@ export default function LobbyPage() {
         console.log("Create Lobby clicked");
         socket.emit("CREATE_LOBBY", { playerName }); 
         router.push('/lobby/lobbyId');
-
     };
 
     const handleJoinSubmit = (e: React.FormEvent) => {
