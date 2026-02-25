@@ -1,3 +1,8 @@
+# The Gung
+
+This repository is our take on the beloved card game The Gang and is implemented as a local webserver that you can connect to from other devices.
+
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

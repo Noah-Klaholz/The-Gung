@@ -1,0 +1,6 @@
+{
+    "name": "web",
+    "scripts": {
+        "dev": "next dev"
+    }
+}
