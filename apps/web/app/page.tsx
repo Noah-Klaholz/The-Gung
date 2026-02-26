@@ -17,7 +17,7 @@ import {
 } from "../lib/skins";
 
 export default function RootPage() {
-  const { playerName, setPlayerName, playerId, setPlayerId, setPlayers, players } = usePlayer();
+  const { playerName, setPlayerName, playerId, setPlayerId, lobbyId, setLobbyId, setPlayers, players } = usePlayer();
 
   const [currentView, setCurrentView] = useState<
     "LOGIN" | "SELECTION" | "WAITING_ROOM" | "GAME"
@@ -34,10 +34,21 @@ export default function RootPage() {
   const [cardSkin, setCardSkin] = useState<CardSkin>(DEFAULT_CARD_SKIN);
   const [tableSkin, setTableSkin] = useState<TableSkin>(DEFAULT_TABLE_SKIN);
 
+  const resolvePlayerName = () => {
+    const storedName = localStorage.getItem("playerName")?.trim();
+    return playerName.trim() || name.trim() || storedName || "";
+  };
+
   useEffect(() => {
     // Load stored player name
     const storedName = localStorage.getItem("playerName");
-    if (storedName) setName(storedName);
+    if (storedName) {
+      const normalizedName = storedName.trim().slice(0, 25);
+      if (normalizedName) {
+        setName(normalizedName);
+        setPlayerName(normalizedName);
+      }
+    }
 
     const storedCardSkin = localStorage.getItem("the-gung-card-skin");
     if (storedCardSkin && isCardSkin(storedCardSkin)) {
@@ -69,6 +80,7 @@ export default function RootPage() {
       setErrorMsg,
       setMaxPlayers,
       setPlayerId,
+      setLobbyId,
     );
 
     return () => {
@@ -80,6 +92,22 @@ export default function RootPage() {
       socket.off("GAME_STARTED");
     };
   }, []);
+
+  useEffect(() => {
+    if (!playerId) return;
+
+    const me = players.find((player) => player.id === playerId);
+    const normalizedName = me?.name?.trim().slice(0, 25);
+    if (!normalizedName) return;
+
+    if (normalizedName !== playerName) {
+      setPlayerName(normalizedName);
+    }
+
+    if (normalizedName !== name) {
+      setName(normalizedName);
+    }
+  }, [players, playerId, playerName, name, setPlayerName]);
 
   useEffect(() => {
     localStorage.setItem("the-gung-card-skin", cardSkin);
@@ -101,14 +129,31 @@ export default function RootPage() {
   };
 
   const handleCreateLobby = () => {
-    if (!activeJoinCode) socket.emit("CREATE_LOBBY", { playerName, playerId });
+    const resolvedName = resolvePlayerName();
+    if (!resolvedName) return;
+
+    if (resolvedName !== playerName) {
+      setPlayerName(resolvedName);
+    }
+
+    if (activeJoinCode || lobbyId) {
+      setActiveJoinCode(null);
+      setLobbyId(undefined);
+    }
+
+    socket.emit("CREATE_LOBBY", { playerName: resolvedName, playerId });
   };
 
   const handleJoinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const code = joinInput.trim();
-    if (code) {
-      socket.emit("JOIN_LOBBY", { joinCode: code, playerName, playerId });
+    const resolvedName = resolvePlayerName();
+    if (code && resolvedName) {
+      if (resolvedName !== playerName) {
+        setPlayerName(resolvedName);
+      }
+
+      socket.emit("JOIN_LOBBY", { joinCode: code, playerName: resolvedName, playerId });
       setJoinInput("");
     }
   };
@@ -133,6 +178,7 @@ export default function RootPage() {
     if (!activeJoinCode) return;
     socket.emit("LEAVE_LOBBY", { joinCode: activeJoinCode, playerId });
     setActiveJoinCode(null);
+    setLobbyId(undefined);
     setIsJoining(false);
     setCurrentView("SELECTION");
   };
@@ -279,12 +325,16 @@ export default function RootPage() {
             <div className="flex flex-col gap-2">
               {players.map((player) => (
                 <div key={player.id} className="flex items-center justify-between p-3 bg-black border border-neutral-800 rounded-lg">
-                  <span className="text-white font-medium">
+                  <span className="text-white font-medium flex items-center gap-2">
+                    <span
+                      title={player.isConnected === false ? "Disconnected" : "Connected"}
+                      className={`inline-block w-2.5 h-2.5 rounded-full ${player.isConnected === false ? "bg-red-500" : "bg-green-500"}`}
+                    />
                     {player.isHost && <span className="mr-2" title="Host">👑</span>}
                     {player.name}
                   </span>
                   <span className={`text-xs uppercase font-bold tracking-wider px-2 py-1 rounded ${player.isReady ? "text-green-500 bg-green-500/10 border border-green-500/20" : "text-yellow-500 bg-yellow-500/10 border border-yellow-500/20"}`}>
-                    {player.isReady ? "Ready" : "Waiting"}
+                    {player.isConnected === false ? "Offline" : player.isReady ? "Ready" : "Waiting"}
                   </span>
                 </div>
               ))}
@@ -425,6 +475,7 @@ export function setupSocketHandlers(
   setErrorMsg: (msg: string | null) => void,
   setMaxPlayers: (limit: number) => void,
   setPlayerId: (id: string) => void,
+  setLobbyId: (id: string | undefined) => void,
 ) {
   socket.off("LOBBY_UPDATE");
   socket.off("LOBBY_CREATED");
@@ -433,7 +484,7 @@ export function setupSocketHandlers(
   socket.off("LOBBY_LEFT");
   socket.off("GAME_STARTED");
 
-  socket.on("LOBBY_UPDATE", ({ players, maxPlayers }) => {
+  socket.on("LOBBY_UPDATE", ({ players, maxPlayers, status }) => {
     if (maxPlayers) setMaxPlayers(maxPlayers);
 
     setPlayers(players.map((p: any) => ({
@@ -441,23 +492,31 @@ export function setupSocketHandlers(
       name: p.name,
       isReady: p.isReady || false,
       isHost: p.isHost || false,
+      isConnected: p.isConnected !== false,
     })));
+
+    if (status === "playing") {
+      setCurrentView("GAME");
+    }
   });
 
-  socket.on("LOBBY_CREATED", ({ joinCode, playerId }) => {
+  socket.on("LOBBY_CREATED", ({ joinCode, playerId, status }) => {
     setActiveJoinCode(joinCode);
+    setLobbyId(joinCode);
     setPlayerId(playerId);
-    setCurrentView("WAITING_ROOM");
+    setCurrentView(status === "playing" ? "GAME" : "WAITING_ROOM");
   });
 
-  socket.on("LOBBY_JOINED", ({ joinCode, playerId }) => {
+  socket.on("LOBBY_JOINED", ({ joinCode, playerId, status }) => {
     setActiveJoinCode(joinCode);
+    setLobbyId(joinCode);
     setPlayerId(playerId);
-    setCurrentView("WAITING_ROOM");
+    setCurrentView(status === "playing" ? "GAME" : "WAITING_ROOM");
   });
 
   socket.on("LOBBY_LEFT", () => {
     setActiveJoinCode("");
+    setLobbyId(undefined);
     setCurrentView("SELECTION");
   });
 

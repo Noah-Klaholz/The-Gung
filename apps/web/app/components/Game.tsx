@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import ChatBox from "./ChatBox";
 import { socket } from "../../lib/socket";
 import { CARD_SKINS, TABLE_SKINS, type CardSkin, type TableSkin } from "../../lib/skins";
+import { usePlayer } from "../../lib/context/playerContext";
 
 interface Card {
     rank: string;
@@ -59,6 +60,8 @@ function convertCard(card: any): Card | null {
 }
 
 export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin }: GameProps) {
+    const { players: lobbyPlayers } = usePlayer();
+
     // Server-driven state
     const [phase, setPhase] = useState("PRE-FLOP");
     const [communityCards, setCommunityCards] = useState<(Card | null)[]>([null, null, null, null, null]);
@@ -377,7 +380,13 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                                     {players.map(p => (
                                         <div key={p.id} className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/50">
-                                            <div className="text-xs font-bold truncate mb-3">{p.name}</div>
+                                            <div className="text-xs font-bold truncate mb-3 flex items-center gap-2">
+                                                <span
+                                                    title={lobbyPlayers.find((player) => player.id === p.id)?.isConnected === false ? "Disconnected" : "Connected"}
+                                                    className={`inline-block w-2.5 h-2.5 rounded-full ${lobbyPlayers.find((player) => player.id === p.id)?.isConnected === false ? "bg-red-500" : "bg-green-500"}`}
+                                                />
+                                                {p.name}
+                                            </div>
                                             <div className="flex gap-2">
                                                 {chipColors.map((color) => {
                                                     const chip = p.chips[color];

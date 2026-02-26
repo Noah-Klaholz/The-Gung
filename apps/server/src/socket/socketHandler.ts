@@ -16,6 +16,7 @@ export function setupSocketHandlers(io: Server) {
     if (deviceId) {
       const lobby = lobbyManager.findLobbyByPlayerId(deviceId);
       if (lobby) {
+        const player = lobby.players.get(deviceId);
         console.log(
           `Auto-reconnecting player ${deviceId} to lobby ${lobby.joinCode}`,
         );
@@ -25,16 +26,22 @@ export function setupSocketHandlers(io: Server) {
           lobbyId: lobby.id,
           joinCode: lobby.joinCode,
           playerId: deviceId,
+          status: lobby.status,
         });
         emitLobbyUpdate(io, lobby.joinCode);
+        if (player) {
+          emitSystemChat(io, lobby.joinCode, `${player.name} reconnected`);
+        }
 
         if (lobby.status === "playing") {
+          socket.emit("GAME_STARTED");
           emitGameUpdate(io, lobby.joinCode);
         }
       }
     }
 
     socket.on("CREATE_LOBBY", ({ playerName, playerId }) => {
+      const normalizedPlayerName = typeof playerName === "string" ? playerName.trim() : "";
       const existingLobby = lobbyManager.findLobbyByPlayerId(playerId);
 
       if (existingLobby) {
@@ -43,17 +50,23 @@ export function setupSocketHandlers(io: Server) {
         emitLobbyUpdate(io, existingLobby.joinCode);
       }
 
-      const result = lobbyManager.createLobby(playerName, socket.id, playerId);
+      const result = lobbyManager.createLobby(normalizedPlayerName || "Player", socket.id, playerId);
 
       socket.join(result.joinCode);
-      socket.emit("LOBBY_CREATED", result);
+      const createdLobby = lobbyManager.getLobbyByCode(result.joinCode);
+      socket.emit("LOBBY_CREATED", {
+        ...result,
+        status: createdLobby?.status ?? "waiting",
+      });
       emitLobbyUpdate(io, result.joinCode);
+      emitSystemChat(io, result.joinCode, `${normalizedPlayerName || "A player"} created the lobby`);
     });
 
     socket.on("JOIN_LOBBY", ({ joinCode, playerName, playerId }) => {
+      const normalizedPlayerName = typeof playerName === "string" ? playerName.trim() : "";
       const result = lobbyManager.joinLobby(
         joinCode,
-        playerName,
+        normalizedPlayerName,
         socket.id,
         playerId,
       );
@@ -65,16 +78,32 @@ export function setupSocketHandlers(io: Server) {
 
       socket.join(result.joinCode);
 
-      socket.emit("LOBBY_JOINED", result);
+      const joinedLobby = lobbyManager.getLobbyByCode(result.joinCode);
+      socket.emit("LOBBY_JOINED", {
+        ...result,
+        status: joinedLobby?.status ?? "waiting",
+      });
       emitLobbyUpdate(io, result.joinCode);
+      emitSystemChat(io, result.joinCode, `${normalizedPlayerName || "A player"} joined the lobby`);
+
+      if (joinedLobby?.status === "playing") {
+        socket.emit("GAME_STARTED");
+        emitGameUpdate(io, result.joinCode);
+      }
     });
 
     socket.on("LEAVE_LOBBY", ({ joinCode, playerId }) => {
+      const lobbyBeforeLeave = lobbyManager.getLobbyByCode(joinCode);
+      const leavingPlayer = lobbyBeforeLeave?.players.get(playerId);
       const result = lobbyManager.leaveLobby(joinCode, playerId);
 
       if (!result) {
         socket.emit("ERROR", { message: "Lobby not found" });
         return;
+      }
+
+      if (leavingPlayer) {
+        emitSystemChat(io, result.joinCode, `${leavingPlayer.name} left the lobby`);
       }
 
       socket.leave(result.joinCode);
@@ -94,6 +123,7 @@ export function setupSocketHandlers(io: Server) {
       console.log("Starting game for lobby", joinCode);
 
       io.to(joinCode).emit("GAME_STARTED");
+      emitSystemChat(io, joinCode, "Game started");
       emitGameUpdate(io, joinCode);
 
       // Send initial game state after a short delay (helps with sync issues) 
@@ -145,17 +175,29 @@ export function setupSocketHandlers(io: Server) {
 
     socket.on("disconnect", () => {
       console.log("Disconnected", socket.id);
-      lobbyManager.handleDisconnect(socket.id);
+      const disconnectedPlayers = lobbyManager.handleDisconnect(socket.id);
+
+      disconnectedPlayers.forEach(({ joinCode, playerName }) => {
+        emitSystemChat(io, joinCode, `${playerName} disconnected`);
+        emitLobbyUpdate(io, joinCode);
+      });
     });
 
-    socket.on("CHAT_MESSAGE", ({ joinCode, lobbyId, message, senderName, playerName }) => {
+    socket.on("CHAT_MESSAGE", ({ joinCode, lobbyId, message, senderName, playerName, playerId }) => {
       const targetJoinCode = joinCode ?? lobbyId;
-      const sender = senderName ?? playerName ?? "Unknown";
       const trimmedMessage = typeof message === "string" ? message.trim() : "";
 
       if (!targetJoinCode || !trimmedMessage) {
         return;
       }
+
+      const lobby = lobbyManager.getLobbyByCode(targetJoinCode);
+      const lobbyPlayer = playerId && lobby ? lobby.players.get(playerId) : undefined;
+      const sender =
+        (typeof senderName === "string" ? senderName.trim() : "") ||
+        (typeof playerName === "string" ? playerName.trim() : "") ||
+        lobbyPlayer?.name ||
+        "Unknown";
 
       emitChatUpdate(io, targetJoinCode, trimmedMessage, sender);
     });
@@ -176,6 +218,7 @@ function emitLobbyUpdate(io: Server, joinCode: string) {
       name: p.name,
       isHost: p.id === lobby.hostId,
       isReady: p.ready,
+      isConnected: Boolean(p.socketId),
     })),
     status: lobby.status,
   });
@@ -209,4 +252,8 @@ function emitChatUpdate(io: Server, joinCode: string, message: string, senderNam
     text: message,
     sender: senderName,
   });
+}
+
+function emitSystemChat(io: Server, joinCode: string, message: string) {
+  emitChatUpdate(io, joinCode, message, "[System]");
 }

@@ -15,6 +15,12 @@ export interface Lobby {
   status: "waiting" | "playing";
 }
 
+interface DisconnectEvent {
+  joinCode: string;
+  playerId: string;
+  playerName: string;
+}
+
 const generateJoinCode = (length = 6) => {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let result = "";
@@ -69,7 +75,12 @@ export class LobbyManager {
     const lobby = this.lobbiesByCode.get(joinCode);
     if (!lobby) return null;
 
-    if (lobby.players.has(playerId)) {
+    const existingPlayer = lobby.players.get(playerId);
+    if (existingPlayer) {
+      existingPlayer.socketId = socketId;
+      if (playerName?.trim()) {
+        existingPlayer.name = playerName.trim();
+      }
       return { lobbyId: lobby.id, joinCode, playerId };
     }
 
@@ -109,15 +120,24 @@ export class LobbyManager {
     return { lobbyId: lobby.id, joinCode };
   }
 
-  handleDisconnect(socketId: string) {
+  handleDisconnect(socketId: string): DisconnectEvent[] {
+    const disconnectedPlayers: DisconnectEvent[] = [];
+
     for (const lobby of this.lobbiesById.values()) {
       for (const player of lobby.players.values()) {
         if (player.socketId === socketId) {
+          disconnectedPlayers.push({
+            joinCode: lobby.joinCode,
+            playerId: player.id,
+            playerName: player.name,
+          });
           player.socketId = undefined;
           player.ready = false; // optional safety
         }
       }
     }
+
+    return disconnectedPlayers;
   }
 
   reconnectPlayerByCode(joinCode: string, playerId: string, socketId: string) {

@@ -34,7 +34,7 @@ export default function ChatBox({
 }: ChatBoxProps) {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const { playerName, lobbyId } = usePlayer();
+  const { playerName, playerId, players, lobbyId } = usePlayer();
 
   const handleChatSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,10 +43,16 @@ export default function ChatBox({
     const targetJoinCode = joinCode ?? lobbyId;
     if (!trimmed || !targetJoinCode) return;
 
+    const myLobbyPlayer = players.find((player) => player.id === playerId);
+    const storedName = localStorage.getItem("playerName")?.trim();
+    const resolvedSenderName =
+      playerName.trim() || myLobbyPlayer?.name?.trim() || storedName || "Unknown";
+
     socket.emit("CHAT_MESSAGE", {
       joinCode: targetJoinCode,
       message: trimmed,
-      senderName: playerName,
+      senderName: resolvedSenderName,
+      playerId,
     });
 
     setMessage(""); // Empty input
