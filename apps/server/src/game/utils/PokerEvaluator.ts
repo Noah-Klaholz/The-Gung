@@ -78,7 +78,7 @@ export function generateTrueRanks(
 
         if (winners.length === 2) return 0; // tie
 
-        return winners[0] === a.hand ? -1 : 1;
+        return winners[0] === a.hand ? 1 : -1;
     });
 
     const results: {

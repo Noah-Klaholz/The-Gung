@@ -28,6 +28,7 @@ interface ShowdownPlayerResult {
     redChip: number;
     handName: string;
     handDescription: string;
+    bestHandCards: string[];
     trueRank: number;
 }
 
@@ -165,6 +166,15 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
         });
     };
 
+    const handleTakePlayerChip = (fromPlayerId: string) => {
+        socket.emit("CHIP_ACTION", {
+            joinCode,
+            playerId,
+            action: { type: "take_player", fromPlayerId },
+        });
+        setSelectedChip(null);
+    };
+
     // Get current player's chip for the current color
     const chipColors: ("white" | "yellow" | "orange" | "red")[] = ["white", "yellow", "orange", "red"];
     const phaseToColor: Record<string, "white" | "yellow" | "orange" | "red"> = {
@@ -194,6 +204,20 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
             case 'clubs': return '♣';
             default: return '';
         }
+    };
+
+    const formatShowdownCard = (solverCard: string) => {
+        if (!solverCard || solverCard.length < 2) return solverCard;
+        const suitCode = solverCard.slice(-1);
+        const rankCode = solverCard.slice(0, -1);
+        const rank = rankCode === "T" ? "10" : rankCode;
+        const suitMap: Record<string, string> = {
+            h: "♥",
+            d: "♦",
+            c: "♣",
+            s: "♠",
+        };
+        return `${rank}${suitMap[suitCode] ?? suitCode}`;
     };
 
     const renderCardPattern = (card: Card) => {
@@ -305,6 +329,13 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                             <div className="flex gap-2">
                                                 {chipColors.map((color) => {
                                                     const chip = p.chips[color];
+                                                    const canStealChip =
+                                                        p.id !== playerId &&
+                                                        color === currentColor &&
+                                                        chip !== null &&
+                                                        phase !== "SHOWDOWN" &&
+                                                        phase !== "FINISHED" &&
+                                                        phase !== "INIT";
                                                     const colorStyles: Record<string, string> = {
                                                         white: "bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.5)]",
                                                         yellow: "bg-yellow-400 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]",
@@ -313,12 +344,15 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                                     };
                                                     const style = chip !== null ? colorStyles[color] : "bg-transparent border-dashed";
                                                     return (
-                                                        <div
+                                                        <button
                                                             key={color}
-                                                            className={`w-8 h-8 rounded-full border border-zinc-800 flex items-center justify-center text-[10px] font-bold ${style}`}
+                                                            type="button"
+                                                            onClick={() => canStealChip && handleTakePlayerChip(p.id)}
+                                                            disabled={!canStealChip}
+                                                            className={`w-8 h-8 rounded-full border border-zinc-800 flex items-center justify-center text-[10px] font-bold transition-all ${style} ${canStealChip ? "cursor-pointer hover:scale-110 hover:ring-2 hover:ring-yellow-400/60" : "cursor-default"}`}
                                                         >
                                                             {chip ?? ""}
-                                                        </div>
+                                                        </button>
                                                     );
                                                 })}
                                             </div>
@@ -493,6 +527,10 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
 
                                             <div className="text-center text-[10px] text-zinc-500">
                                                 {p.handDescription}
+                                            </div>
+
+                                            <div className="text-center text-[10px] text-zinc-400 font-mono tracking-wide">
+                                                {p.bestHandCards.map((card) => formatShowdownCard(card)).join(" · ")}
                                             </div>
 
                                             {isLast && revealed && (

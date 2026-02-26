@@ -26,6 +26,7 @@ export interface ShowdownPlayerResult {
   redChip: number;
   handName: string;
   handDescription: string;
+  bestHandCards: string[];
   trueRank: number;
 }
 
@@ -327,6 +328,7 @@ export class gameLogic {
         redChip: player.chips.red ?? -1,
         handName: hand.name,
         handDescription: hand.descr,
+        bestHandCards: hand.cards,
         trueRank: player.trueRank,
       };
     });
