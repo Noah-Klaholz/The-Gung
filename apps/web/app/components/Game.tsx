@@ -14,13 +14,37 @@ interface GameProps {
     onLeave: () => void;
 }
 
+// Mock showdown players sorted by chip bid (lowest first = revealed first)
+const showdownPlayers = [
+    { id: "1", name: "Player One", chip: 1, hand: "High Card", cards: [{ rank: "2", suit: "clubs" }, { rank: "7", suit: "spades" }] },
+    { id: "2", name: "Player Two", chip: 2, hand: "One Pair", cards: [{ rank: "J", suit: "hearts" }, { rank: "J", suit: "diamonds" }] },
+    { id: "3", name: "Player Three", chip: 3, hand: "Two Pair", cards: [{ rank: "A", suit: "spades" }, { rank: "K", suit: "hearts" }] },
+    { id: "4", name: "Player Four", chip: 4, hand: "Full House", cards: [{ rank: "Q", suit: "clubs" }, { rank: "Q", suit: "hearts" }] },
+    { id: "5", name: "Player Five", chip: 5, hand: "Straight Flush", cards: [{ rank: "9", suit: "spades" }, { rank: "8", suit: "spades" }] },
+    { id: "6", name: "Player Six", chip: 6, hand: "Royal Flush", cards: [{ rank: "A", suit: "hearts" }, { rank: "K", suit: "hearts" }] },
+];
+
 export default function Game({ playerId, joinCode, onLeave }: GameProps) {
     const [showShowdown, setShowShowdown] = useState(false);
+    const [revealedCount, setRevealedCount] = useState(0);
 
     // Mock State for UI demonstration
     const [vaults, setVaults] = useState("1/3");
     const [alarms, setAlarms] = useState("0/3");
     const [phase, setPhase] = useState("FLOP");
+
+    // When showdown opens, start sequential reveal
+    useEffect(() => {
+        if (!showShowdown) { setRevealedCount(0); return; }
+        setRevealedCount(0);
+        let i = 0;
+        const interval = setInterval(() => {
+            i++;
+            setRevealedCount(i);
+            if (i >= showdownPlayers.length) clearInterval(interval);
+        }, 900);
+        return () => clearInterval(interval);
+    }, [showShowdown]);
 
     // Dummy data for visual representation
     const communityCards: (Card | null)[] = [
@@ -42,7 +66,56 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
         { id: "3", name: "Player Three", rounds: ["Free", "2", "", ""] },
     ];
 
-    const availableChips = ["2", "1", "Free", "Free", "Free", "Free"];
+    const MAX_CHIPS = 6;
+    const availableChips = Array.from({ length: MAX_CHIPS }, (_, i) =>
+        i < players.length ? String(i + 1) : null
+    );
+
+    const phaseColorMap: Record<string, string> = {
+        "PRE-FLOP": "bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.4)]",
+        "FLOP": "bg-yellow-400 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]",
+        "TURN": "bg-orange-500 text-white shadow-[0_0_10px_rgba(249,115,22,0.5)]",
+        "RIVER": "bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.5)]",
+    };
+    const currentChipColor = phaseColorMap[phase] ?? "bg-zinc-700 text-zinc-300";
+
+    const getSuitSymbol = (suit: string) => {
+        switch (suit) {
+            case 'hearts': return '♥';
+            case 'spades': return '♠';
+            case 'diamonds': return '♦';
+            case 'clubs': return '♣';
+            default: return '';
+        }
+    };
+
+    const renderCardPattern = (card: Card) => {
+        const symbol = getSuitSymbol(card.suit);
+        const color = card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900';
+
+        if (['A', 'J', 'Q', 'K', '10'].includes(card.rank)) {
+            return (
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <span className={`text-6xl ${color}`}>{symbol}</span>
+                </div>
+            );
+        }
+
+        const count = parseInt(card.rank);
+        if (isNaN(count)) return null;
+
+        const gridClass = count <= 3 ? "flex flex-col" : "grid grid-cols-2";
+
+        return (
+            <div className={`absolute inset-0 flex items-center justify-center p-6 ${color}`}>
+                <div className={`${gridClass} gap-x-4 gap-y-2`}>
+                    {Array.from({ length: count }).map((_, i) => (
+                        <span key={i} className="text-xl leading-none">{symbol}</span>
+                    ))}
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="min-h-screen bg-black text-white flex items-center justify-center p-4 overflow-hidden relative">
@@ -86,14 +159,28 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                 </div>
                                 <div className="relative group">
                                     <button className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors border border-zinc-700">?</button>
-                                    <div className="absolute top-10 right-0 w-64 bg-zinc-900 border border-zinc-800 p-4 rounded-xl shadow-2xl hidden group-hover:block z-50">
-                                        <h4 className="text-[10px] font-bold text-zinc-500 uppercase mb-2">Cheat Sheet</h4>
-                                        <ul className="text-[10px] space-y-1 text-zinc-300">
-                                            <li className="flex justify-between"><span>Royal Flush</span> <span className="text-yellow-500">10</span></li>
-                                            <li className="flex justify-between"><span>Straight Flush</span> <span className="text-yellow-500">9</span></li>
-                                            <li className="flex justify-between"><span>Four of a Kind</span> <span className="text-yellow-500">8</span></li>
-                                            <li className="flex justify-between"><span>Full House</span> <span className="text-yellow-500">7</span></li>
-                                        </ul>
+                                    <div className="absolute top-10 right-0 w-80 bg-zinc-900 border border-zinc-800 p-4 rounded-xl shadow-2xl hidden group-hover:block z-50">
+                                        <h4 className="text-[10px] font-bold text-zinc-500 uppercase mb-3 tracking-widest">Hand Rankings</h4>
+                                        <div className="grid text-[10px] gap-y-1.5" style={{ gridTemplateColumns: '1fr auto auto' }}>
+                                            {[
+                                                { name: "Royal Flush", ex: "A K Q J 10 ♥", rank: "10", gold: true },
+                                                { name: "Straight Flush", ex: "5 6 7 8 9 ♠", rank: "9" },
+                                                { name: "Four of a Kind", ex: "A A A A K", rank: "8" },
+                                                { name: "Full House", ex: "K K K Q Q", rank: "7" },
+                                                { name: "Flush", ex: "2 5 7 J A ♦", rank: "6" },
+                                                { name: "Straight", ex: "4 5 6 7 8", rank: "5" },
+                                                { name: "Three of a Kind", ex: "Q Q Q 7 2", rank: "4" },
+                                                { name: "Two Pair", ex: "J J 4 4 9", rank: "3" },
+                                                { name: "One Pair", ex: "A A 7 3 K", rank: "2" },
+                                                { name: "High Card", ex: "A J 9 5 2", rank: "1", dim: true },
+                                            ].map(h => (
+                                                <React.Fragment key={h.name}>
+                                                    <span className={h.gold ? "font-bold text-yellow-400" : h.dim ? "text-zinc-500" : "text-zinc-300"}>{h.name}</span>
+                                                    <span className="text-zinc-600 font-mono mx-3">{h.ex}</span>
+                                                    <span className={`font-bold text-right ${h.gold ? "text-yellow-500" : h.dim ? "text-zinc-600" : "text-yellow-500"}`}>{h.rank}</span>
+                                                </React.Fragment>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -111,17 +198,23 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                         <div key={p.id} className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/50">
                                             <div className="text-xs font-bold mb-3 truncate">{p.name}</div>
                                             <div className="flex gap-2">
-                                                {p.rounds.map((chip, idx) => (
-                                                    <div
-                                                        key={idx}
-                                                        className={`w-8 h-8 rounded-full border border-zinc-800 flex items-center justify-center text-[10px] font-bold ${chip === "1" ? "bg-white text-black shadow-[0_0_10px_white]" :
-                                                                chip === "2" ? "bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,1)]" :
-                                                                    chip === "Free" ? "bg-zinc-700 text-zinc-300" : "bg-transparent"
-                                                            }`}
-                                                    >
-                                                        {chip === "Free" ? "F" : chip}
-                                                    </div>
-                                                ))}
+                                                {p.rounds.map((chip, idx) => {
+                                                    const phaseColors: Record<number, string> = {
+                                                        0: "bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.5)]",
+                                                        1: "bg-yellow-400 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]",
+                                                        2: "bg-orange-500 text-white shadow-[0_0_10px_rgba(249,115,22,0.5)]",
+                                                        3: "bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.5)]",
+                                                    };
+                                                    const colorClass = chip ? (phaseColors[idx] ?? "bg-zinc-700 text-zinc-300") : "bg-transparent border-dashed";
+                                                    return (
+                                                        <div
+                                                            key={idx}
+                                                            className={`w-8 h-8 rounded-full border border-zinc-800 flex items-center justify-center text-[10px] font-bold ${colorClass}`}
+                                                        >
+                                                            {chip === "Free" ? "F" : chip}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     ))}
@@ -135,21 +228,19 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(20,83,45,0.2)_0%,_transparent_70%)] pointer-events-none" />
 
                                 {/* Community Cards */}
-                                <div className="flex-1 flex items-center justify-center gap-4">
+                                <div className="flex-1 flex items-center justify-center gap-1">
                                     {communityCards.map((card, idx) => (
-                                        <div key={idx} className={`w-28 h-40 rounded-xl transition-all duration-700 ${card ? 'bg-white shadow-[0_15px_30px_rgba(0,0,0,0.5)] rotate-0 scale-100' : 'bg-zinc-800 border-2 border-dashed border-zinc-700 -rotate-2 scale-95'}`}>
+                                        <div key={idx} className={`w-28 h-40 rounded-xl transition-all duration-700 ${card ? 'bg-white shadow-[0_15px_30px_rgba(0,0,0,0.5)]' : 'bg-zinc-800 border-2 border-dashed border-zinc-700 scale-95'}`}>
                                             {card && (
                                                 <div className="p-2 h-full flex flex-col justify-between text-black font-black italic relative overflow-hidden">
                                                     <div className={`text-xl leading-none ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
                                                         {card.rank}<br />
-                                                        <span className="text-base">{card.suit === 'hearts' ? '♥' : card.suit === 'spades' ? '♠' : card.suit === 'diamonds' ? '♦' : '♣'}</span>
+                                                        <span className="text-base">{getSuitSymbol(card.suit)}</span>
                                                     </div>
-                                                    <div className="absolute inset-0 flex items-center justify-center text-4xl opacity-10">
-                                                        {card.suit === 'hearts' ? '♥' : card.suit === 'spades' ? '♠' : card.suit === 'diamonds' ? '♦' : '♣'}
-                                                    </div>
+                                                    {renderCardPattern(card)}
                                                     <div className={`text-xl leading-none self-end rotate-180 ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
                                                         {card.rank}<br />
-                                                        <span className="text-base">{card.suit === 'hearts' ? '♥' : card.suit === 'spades' ? '♠' : card.suit === 'diamonds' ? '♦' : '♣'}</span>
+                                                        <span className="text-base">{getSuitSymbol(card.suit)}</span>
                                                     </div>
                                                 </div>
                                             )}
@@ -158,25 +249,17 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                 </div>
 
                                 {/* Middle Action Bar */}
-                                <div className="h-32 bg-zinc-900/80 backdrop-blur-md border-t border-zinc-800 flex items-center justify-between px-12 relative">
+                                <div className="h-24 bg-zinc-900/80 backdrop-blur-md border-t border-zinc-800 flex items-center justify-end px-8 relative">
 
-                                    {/* Timer Banner */}
-                                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-6 py-1 bg-red-600 animate-pulse rounded-full text-[10px] font-black tracking-widest text-white shadow-xl flex items-center gap-2">
-                                        ⏳ FORCED ADVANCE IN: 12s
+                                    {/* Active Selection Display – centered */}
+                                    <div className="absolute left-1/2 -translate-x-1/2 w-16 h-16 rounded-full border-4 border-dashed border-zinc-700 flex items-center justify-center">
+                                        <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center text-xl font-black shadow-[0_0_20px_rgba(220,38,38,0.5)]">2</div>
                                     </div>
 
-                                    <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
-                                        Your Selection
-                                    </div>
-
-                                    {/* Active Selection Display */}
-                                    <div className="w-20 h-20 rounded-full border-4 border-dashed border-zinc-700 flex items-center justify-center">
-                                        <div className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-2xl font-black shadow-[0_0_20px_rgba(220,38,38,0.5)]">2</div>
-                                    </div>
-
-                                    <div className="flex flex-col items-center gap-1">
-                                        <button className="px-8 py-3 bg-green-600 hover:bg-green-500 font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-[0_0_20px_rgba(22,163,74,0.3)]">
-                                            Start Vote to Advance
+                                    {/* Vote Button – right corner */}
+                                    <div className="flex flex-col items-end gap-1">
+                                        <button className="px-4 py-2 bg-green-700 hover:bg-green-600 font-black text-[10px] uppercase tracking-widest rounded-lg transition-all shadow-[0_0_12px_rgba(22,163,74,0.3)]">
+                                            Start Vote ▶
                                         </button>
                                         <span className="text-[10px] font-bold text-zinc-500">Votes: 1 / 3</span>
                                     </div>
@@ -185,35 +268,37 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                 {/* Bottom Player Area */}
                                 <div className="h-48 bg-zinc-950 flex flex-col justify-end p-8 relative">
 
-                                    {/* Chip Pool (Left) */}
-                                    <div className="absolute left-8 bottom-8">
-                                        <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-3">Available Chips</div>
+                                    {/* Chip Pool – repositioned */}
+                                    <div className="absolute left-8 -top-24">
+                                        <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Available Chips</div>
                                         <div className="grid grid-cols-3 gap-3">
                                             {availableChips.map((chip, idx) => (
                                                 <div key={idx} className="flex flex-col items-center gap-1">
-                                                    <button className={`w-12 h-12 rounded-full border-2 border-zinc-800 flex items-center justify-center text-sm font-black transition-all hover:scale-110 active:scale-90 ${chip === '2' ? 'bg-red-600 text-white cursor-not-allowed opacity-50' :
-                                                            chip === '1' ? 'bg-white text-black underline decoration-red-500' : 'bg-transparent border-dashed text-zinc-500 hover:border-zinc-500'
-                                                        }`}>
-                                                        {chip === 'Free' ? 'F' : chip}
-                                                    </button>
-                                                    <span className="text-[8px] font-black text-zinc-700 uppercase">{chip === '2' ? 'Player Two' : 'FREE'}</span>
+                                                    {chip !== null ? (
+                                                        <button className={`w-12 h-12 rounded-full border-2 border-transparent flex items-center justify-center text-sm font-black transition-all hover:scale-110 active:scale-90 ${currentChipColor}`}>
+                                                            {chip}
+                                                        </button>
+                                                    ) : (
+                                                        <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center opacity-40" />
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
                                     </div>
 
                                     {/* Hand Cards (Centered) */}
-                                    <div className="flex justify-center gap-2 -mb-4">
+                                    <div className="flex justify-center gap-2 -mb-20">
                                         {myCards.map((card, idx) => (
                                             <div key={idx} className="w-24 h-36 bg-white rounded-lg shadow-2xl transition-all hover:-translate-y-8 cursor-pointer relative overflow-hidden group">
                                                 <div className="p-2 h-full flex flex-col justify-between text-black font-black italic">
                                                     <div className={`text-base leading-none ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
                                                         {card.rank}<br />
-                                                        <span className="text-xs">{card.suit === 'hearts' ? '♥' : card.suit === 'spades' ? '♠' : card.suit === 'diamonds' ? '♦' : '♣'}</span>
+                                                        <span className="text-xs">{getSuitSymbol(card.suit)}</span>
                                                     </div>
+                                                    {renderCardPattern(card)}
                                                     <div className={`text-base leading-none self-end rotate-180 ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
                                                         {card.rank}<br />
-                                                        <span className="text-xs">{card.suit === 'hearts' ? '♥' : card.suit === 'spades' ? '♠' : card.suit === 'diamonds' ? '♦' : '♣'}</span>
+                                                        <span className="text-xs">{getSuitSymbol(card.suit)}</span>
                                                     </div>
                                                 </div>
                                                 {/* Shimmer Effect */}
@@ -222,16 +307,6 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                         ))}
                                     </div>
 
-                                    {/* Hand Descriptor */}
-                                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-zinc-900 border border-zinc-800 rounded-full shadow-lg shadow-black/50">
-                                        <span className="text-[10px] font-black tracking-widest text-zinc-400">BEST HAND: </span>
-                                        <span className="text-[10px] font-bold text-yellow-500 tracking-wider">ACE HIGH FLUSH</span>
-                                    </div>
-
-                                    {/* Debug Info (Right) */}
-                                    <div className="absolute right-8 bottom-3 text-[10px] font-mono text-zinc-800 uppercase tabular-nums">
-                                        SID: {playerId.slice(0, 8)} | v1.0.4-gung
-                                    </div>
                                 </div>
 
                             </div>
@@ -247,14 +322,6 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
 
                         {/* Messages */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col">
-                            <div className="self-start max-w-[80%] bg-zinc-900 p-3 rounded-2xl rounded-tl-none border border-zinc-800">
-                                <div className="text-[10px] font-bold text-zinc-500 mb-1 uppercase tracking-tighter">System</div>
-                                <p className="text-xs text-zinc-300">Heist initiated. Good luck team.</p>
-                            </div>
-
-                            <div className="self-end max-w-[80%] bg-zinc-800 p-3 rounded-2xl rounded-tr-none border border-zinc-700">
-                                <p className="text-xs text-white">I've got the King, playing for Flush.</p>
-                            </div>
                         </div>
 
                         {/* Input */}
@@ -262,7 +329,7 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                             <form className="relative flex items-center" onSubmit={(e) => e.preventDefault()}>
                                 <input
                                     type="text"
-                                    placeholder="Send data..."
+                                    placeholder="Nachricht senden..."
                                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-zinc-600 transition-colors"
                                 />
                                 <button className="absolute right-2 text-zinc-500 hover:text-white transition-colors">➔</button>
@@ -273,44 +340,123 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                 </div>
             </div>
 
-            {/* SHOWDOWN OVERLAY (Modal) */}
+            {/* ── SHOWDOWN OVERLAY ─────────────────────────────────── */}
             {showShowdown && (
-                <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-8 overflow-hidden animate-in fade-in duration-500">
-                    <div className="w-full max-w-6xl h-full flex flex-col">
-                        <header className="h-20 flex items-center justify-between border-b border-zinc-800">
-                            <h2 className="text-4xl font-black italic bg-gradient-to-r from-yellow-300 to-yellow-600 bg-clip-text text-transparent tracking-tighter">FINAL SHOWDOWN</h2>
-                            <button onClick={() => setShowShowdown(false)} className="px-8 py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase tracking-widest text-xs rounded-xl shadow-[0_0_30px_rgba(234,179,8,0.3)] transition-all">
-                                Close Results
-                            </button>
-                        </header>
+                <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col p-6 gap-6 overflow-hidden">
 
-                        <div className="flex-1 overflow-x-auto overflow-y-hidden flex items-center gap-6 px-12 pb-12">
-                            {/* Showdown Result Cards */}
-                            {[1, 2, 3].map(rank => (
-                                <div key={rank} className="min-w-[300px] h-[500px] bg-zinc-900/50 border border-zinc-800 rounded-3xl p-8 flex flex-col relative group transition-all hover:border-yellow-500/50 hover:bg-zinc-900 shadow-2xl">
-                                    <div className={`absolute -top-4 -left-4 w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shadow-2xl rotate-[-12deg] border-2 ${rank === 1 ? 'bg-red-600 border-red-400 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-500'}`}>
-                                        #{rank}
-                                    </div>
-                                    <div className="text-right text-xs font-black text-zinc-500 uppercase tracking-widest mb-12">
-                                        BID: <span className="text-white">2 CHIPS</span>
-                                    </div>
-                                    <div className="mb-4">
-                                        <div className="text-sm font-black text-zinc-400 uppercase tracking-widest mb-1">Player Name</div>
-                                        <div className="text-2xl font-black text-white italic truncate">PLAYER {rank}</div>
-                                    </div>
-                                    <div className="flex-1 flex flex-col justify-center items-center">
-                                        <div className="text-[10px] font-black text-yellow-500/50 uppercase tracking-[0.3em] mb-4">EVALUATED HAND</div>
-                                        <div className="text-2xl font-black text-yellow-500 text-center uppercase tracking-tighter leading-none mb-8">
-                                            ACE HIGH<br />FLUSH
+                    {/* Header */}
+                    <header className="flex items-center justify-between shrink-0">
+                        <h2 className="text-4xl font-black italic bg-gradient-to-r from-yellow-300 to-yellow-600 bg-clip-text text-transparent tracking-tighter">
+                            FINAL SHOWDOWN
+                        </h2>
+                        <button
+                            onClick={() => setShowShowdown(false)}
+                            className="px-8 py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase tracking-widest text-xs rounded-xl shadow-[0_0_30px_rgba(234,179,8,0.3)] transition-all"
+                        >
+                            Close Results
+                        </button>
+                    </header>
+
+                    {/* 6-card grid – all fit in one row */}
+                    <div className="flex-1 grid gap-3 items-stretch" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+                        {showdownPlayers.map((p, idx) => {
+                            const revealed = idx < revealedCount;
+                            const isWinner = idx === showdownPlayers.length - 1;
+                            return (
+                                <div
+                                    key={p.id}
+                                    className="relative"
+                                    style={{ perspective: '800px' }}
+                                >
+                                    {/* Card wrapper – flips on reveal */}
+                                    <div
+                                        className="w-full h-full transition-transform duration-700"
+                                        style={{
+                                            transformStyle: 'preserve-3d',
+                                            transform: revealed ? 'rotateY(0deg)' : 'rotateY(90deg)',
+                                        }}
+                                    >
+                                        <div className={`
+                                            w-full h-full rounded-2xl border flex flex-col p-4 gap-3 shadow-2xl
+                                            ${isWinner && revealed
+                                                ? 'bg-yellow-950/60 border-yellow-500/60 shadow-yellow-500/20'
+                                                : 'bg-zinc-900/70 border-zinc-800'
+                                            }
+                                        `}>
+                                            {/* Rank badge */}
+                                            <div className={`
+                                                self-start px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest
+                                                ${isWinner ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-zinc-400'}
+                                            `}>
+                                                Chip {p.chip}
+                                            </div>
+
+                                            {/* Player name */}
+                                            <div className="font-black text-sm uppercase tracking-tight truncate text-white">
+                                                {p.name}
+                                            </div>
+
+                                            {/* Community cards (river) */}
+                                            <div className="flex gap-1 justify-center">
+                                                {communityCards.map((card, ci) => (
+                                                    <div key={ci} className={`w-8 h-11 rounded flex-shrink-0 relative overflow-hidden ${card ? 'bg-white shadow' : 'bg-zinc-800 border border-dashed border-zinc-700'}`}>
+                                                        {card && (
+                                                            <>
+                                                                <div className={`absolute top-0.5 left-0.5 text-[7px] font-black leading-none ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
+                                                                    {card.rank}
+                                                                </div>
+                                                                <div className={`absolute inset-0 flex items-center justify-center text-sm ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-zinc-800'}`}>
+                                                                    {getSuitSymbol(card.suit)}
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {/* Hand cards */}
+                                            <div className="flex gap-1.5 justify-center items-center">
+                                                {p.cards.map((card, ci) => (
+                                                    <div key={ci} className="w-14 h-20 bg-white rounded-lg shadow-xl relative overflow-hidden flex-shrink-0">
+                                                        {/* Top corner */}
+                                                        <div className={`absolute top-1 left-1 text-xs font-black leading-none ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
+                                                            {card.rank}<br />
+                                                            <span className="text-[9px]">{getSuitSymbol(card.suit)}</span>
+                                                        </div>
+                                                        {/* Center symbol */}
+                                                        <div className={`absolute inset-0 flex items-center justify-center text-3xl ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500 opacity-20' : 'text-zinc-800 opacity-15'}`}>
+                                                            {getSuitSymbol(card.suit)}
+                                                        </div>
+                                                        {/* Bottom corner */}
+                                                        <div className={`absolute bottom-1 right-1 rotate-180 text-xs font-black leading-none ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
+                                                            {card.rank}<br />
+                                                            <span className="text-[9px]">{getSuitSymbol(card.suit)}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {/* Hand name */}
+                                            <div className={`text-center text-xs font-black uppercase tracking-widest ${isWinner ? 'text-yellow-400' : 'text-zinc-400'}`}>
+                                                {p.hand}
+                                            </div>
+
+                                            {/* Winner crown */}
+                                            {isWinner && revealed && (
+                                                <div className="text-center text-2xl animate-bounce">👑</div>
+                                            )}
                                         </div>
                                     </div>
-                                    <div className="flex justify-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
-                                        <div className="w-12 h-18 bg-white/10 rounded border border-white/20"></div>
-                                        <div className="w-12 h-18 bg-white/10 rounded border border-white/20"></div>
-                                    </div>
+
+                                    {/* Still-hidden back face */}
+                                    {!revealed && (
+                                        <div className="absolute inset-0 rounded-2xl bg-zinc-900 border border-zinc-700 flex items-center justify-center">
+                                            <span className="text-5xl opacity-20">🂠</span>
+                                        </div>
+                                    )}
                                 </div>
-                            ))}
-                        </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}
@@ -323,13 +469,14 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                 Debug Overlay
             </button>
 
-            {/* Leave Lobby Button */}
+            {/* Leave Game Button */}
             <button
                 onClick={onLeave}
-                className="fixed bottom-4 left-4 z-40 px-3 py-1 bg-zinc-800 text-[8px] font-bold text-zinc-500 rounded uppercase tracking-widest hover:text-red-500 transition-colors"
+                className="fixed bottom-4 right-4 z-40 px-3 py-1 bg-zinc-800 text-[8px] font-bold text-zinc-500 rounded uppercase tracking-widest hover:text-red-500 transition-colors"
             >
                 Leave Game
             </button>
         </div>
     );
 }
+
