@@ -1,5 +1,5 @@
 import { Hand } from 'pokersolver';
-import { Card } from "./utils/Card";
+import { Card } from "./utils/Card.ts";
 
 
 export function resolveGangHand(

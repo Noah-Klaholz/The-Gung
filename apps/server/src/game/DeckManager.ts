@@ -1,4 +1,4 @@
-import { Card, Suit, Rank, SUITS, RANKS } from "./utils/Card"
+import { Card, Suit, Rank, SUITS, RANKS } from "./utils/Card.ts"
 
 export function createDeck(): Card[] {
     const deck: Card[] = [];

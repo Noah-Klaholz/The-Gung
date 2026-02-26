@@ -1,7 +1,7 @@
-import * as dm from "./DeckManager";
-import * as pe from "./PokerEvaluator";
-import { Card } from "./utils/Card";
-import { LobbyPlayer } from "../lobby/lobbyManager";
+import * as dm from "./DeckManager.ts";
+import * as pe from "./PokerEvaluator.ts";
+import { Card } from "./utils/Card.ts";
+import { LobbyPlayer } from "../lobby/lobbyManager.ts";
 
 export interface GamePlayer {
   id: string;

@@ -26,7 +26,6 @@ const generateJoinCode = (length = 6) => {
   return result;
 };
 
-
 export class LobbyManager {
   private lobbiesById = new Map<string, Lobby>();
   private lobbiesByCode = new Map<string, Lobby>();
@@ -61,9 +60,18 @@ export class LobbyManager {
     return { lobbyId, joinCode, playerId };
   }
 
-  joinLobby(joinCode: string, playerName: string, socketId: string, playerId: string) {
+  joinLobby(
+    joinCode: string,
+    playerName: string,
+    socketId: string,
+    playerId: string,
+  ) {
     const lobby = this.lobbiesByCode.get(joinCode);
     if (!lobby) return null;
+
+    if (lobby.players.has(playerId)) {
+      return { lobbyId: lobby.id, joinCode, playerId };
+    }
 
     lobby.players.set(playerId, {
       id: playerId,

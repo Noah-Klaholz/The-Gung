@@ -1,8 +1,5 @@
-import { v4 as uuid } from "uuid";
-import { Lobby } from "../lobby/lobbyManager";
-import "DeckManager";
-import { gameLogic } from "./gameLogic";
-import { act } from "react";
+import { Lobby } from "../lobby/lobbyManager.ts";
+import { gameLogic } from "./gameLogic.ts";
 
 interface ActiveGame {
   lobbyCode: string;
