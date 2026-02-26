@@ -3,11 +3,15 @@
 import { useState, useEffect } from "react";
 import { socket } from "../lib/socket";
 import { usePlayer, Player } from "../lib/context/playerContext";
+import Game from "./components/Game";
 
 export default function RootPage() {
   const { playerName, setPlayerName, playerId, setPlayerId, setPlayers, players } = usePlayer();
 
-  const [currentView, setCurrentView] = useState<"LOGIN" | "SELECTION" | "WAITING_ROOM">("LOGIN");
+  const [currentView, setCurrentView] = useState<
+    "LOGIN" | "SELECTION" | "WAITING_ROOM" | "GAME"
+  >("LOGIN");
+
   const [name, setName] = useState("");
   const [isJoining, setIsJoining] = useState(false);
   const [activeJoinCode, setActiveJoinCode] = useState<string | null>(null);
@@ -283,6 +287,13 @@ export default function RootPage() {
       {currentView === "LOGIN" && renderLoginView()}
       {currentView === "SELECTION" && renderSelectionView()}
       {currentView === "WAITING_ROOM" && renderWaitingRoomView()}
+      {currentView === "GAME" && activeJoinCode && (
+        <Game
+          playerId={playerId}
+          joinCode={activeJoinCode}
+          onLeave={handleLeaveLobby}
+        />
+      )}
     </div>
   );
 }
@@ -291,7 +302,7 @@ export default function RootPage() {
 export function setupSocketHandlers(
   setPlayers: React.Dispatch<React.SetStateAction<Player[]>>,
   setActiveJoinCode: (id: string) => void,
-  setCurrentView: (view: "LOGIN" | "SELECTION" | "WAITING_ROOM") => void,
+  setCurrentView: (view: "LOGIN" | "SELECTION" | "WAITING_ROOM" | "GAME") => void,
   setIsJoining: (joining: boolean) => void,
   setErrorMsg: (msg: string | null) => void,
   setMaxPlayers: (limit: number) => void,
@@ -339,6 +350,7 @@ export function setupSocketHandlers(
   });
 
   socket.on("GAME_STARTED", () => {
-    console.log("Game started!");
+    console.log("Received Game Started");
+    setCurrentView("GAME");
   });
 }
