@@ -1,6 +1,6 @@
 import * as dm from "./DeckManager";
 import * as pe from "./PokerEvaluator";
-import { Card } from "./utils/Card"
+import { Card } from "./utils/Card";
 
 export interface Player {
   id: string;
@@ -11,6 +11,7 @@ export interface Player {
 }
 
 export type GamePhase =
+  | "init"
   | "pre-flop"
   | "flop"
   | "turn"
@@ -39,7 +40,7 @@ export class gameLogic {
       { length: this.players.length },
       (_, i) => i + 1,
     );
-    this.phase = "pre-flop";
+    this.phase = "init";
   }
 
   startGame() {
@@ -48,12 +49,21 @@ export class gameLogic {
     }
     this.communityCards = dm.drawCard(this.deck, 5);
 
-    pe.generateTrueRanks(
+    const ranking = pe.generateTrueRanks(
       this.players.map((p) => ({
         playerId: p.id,
         pocket: p.hand,
       })),
       this.communityCards,
     );
+
+    for (const result of ranking) {
+        const player = this.players.find(p => p.id === result.playerId);
+        if (player) {
+            player.trueRank = result.trueRank;
+        }
+    }
+
+    this.phase = "pre-flop";
   }
 }

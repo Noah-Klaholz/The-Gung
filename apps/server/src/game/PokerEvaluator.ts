@@ -61,44 +61,51 @@ export function evaluateShowdownSequence(orderedPlayerHands: Card[][], community
  * Schwächste Hand = Rang 1.
  * Gleiche Hände bekommen den exakt gleichen trueRank.
  */
-export function generateTrueRanks(playerHands: { playerId: string, pocket: Card[] }[], communityCards: Card[]) {
-
-    const evals = playerHands.map(p => ({
+export function generateTrueRanks(
+    playerHands: { playerId: string; pocket: Card[] }[],
+    communityCards: Card[]
+) {
+    const evaluated = playerHands.map(p => ({
         playerId: p.playerId,
         hand: resolveGangHand(p.pocket, communityCards)
     }));
 
-    evals.sort((a, b) => {
+    // Sort weakest → strongest
+    evaluated.sort((a, b) => {
         const winners = Hand.winners([a.hand, b.hand]);
 
-        if (winners.length === 2) return 0;
+        if (winners.length === 2) return 0; // tie
 
-        return winners[0] === a.hand ? 1 : -1;
+        return winners[0] === a.hand ? -1 : 1;
     });
 
-    let currentTrueRank = 1;
-    const result: { playerId: string; trueRank: number; descr: string }[] = [];
+    const results: {
+        playerId: string;
+        trueRank: number;
+        descr: string;
+    }[] = [];
 
-    // 3. Ränge zuteilen
-    evals.forEach((e, i) => {
+    let currentRank = 1;
+
+    for (let i = 0; i < evaluated.length; i++) {
         if (i > 0) {
-            const prev = evals[i - 1];
-            const winners = Hand.winners([prev.hand, e.hand]);
+            const prev = evaluated[i - 1];
+            const curr = evaluated[i];
 
-            // Wenn der aktuelle (e) strikt stärker ist als der vorherige (prev),
-            // dann wird der globale Truerank auf seinen Index+1 hochgeschaltet.
-            // Ist er gleich stark, behält er einfach den aktuellen trueRank.
-            if (winners.length === 1 && winners[0] === e.hand) {
-                currentTrueRank = i + 1;
+            const winners = Hand.winners([prev.hand, curr.hand]);
+
+            // If strictly stronger → increase rank
+            if (winners.length === 1 && winners[0] === curr.hand) {
+                currentRank++;
             }
         }
 
-        result.push({
-            playerId: e.playerId,
-            trueRank: currentTrueRank,
-            descr: e.hand.descr
+        results.push({
+            playerId: evaluated[i].playerId,
+            trueRank: currentRank,
+            descr: evaluated[i].hand.descr
         });
-    });
+    }
 
-    return result;
+    return results;
 }
