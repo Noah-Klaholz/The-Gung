@@ -1,14 +1,4 @@
-export type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades';
-export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A';
-
-export interface Card {
-    rank: Rank;
-    suit: Suit;
-}
-
-const SUITS: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
-const RANKS: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-
+import { Card, Suit, Rank, SUITS, RANKS } from "./utils/Card"
 
 export function createDeck(): Card[] {
     const deck: Card[] = [];
@@ -26,3 +16,25 @@ export function shuffleDeck(deck: Card[]): void {
         [deck[i], deck[j]] = [deck[j], deck[i]];
     }
 }
+
+// Single or multiple card draw overloads
+export function drawCard(deck: Card[]): Card;
+export function drawCard(deck: Card[], amount: number): Card[];
+export function drawCard(deck: Card[], amount?: number): Card | Card[] {
+    if (amount === undefined) {
+        // Draw a single card
+        const card = deck.pop();
+        if (!card) throw new Error("Deck is empty!");
+        return card;
+    } else {
+        if (amount > deck.length) throw new Error("Not enough cards in the deck!");
+        const cards: Card[] = [];
+        for (let i = 0; i < amount; i++) {
+            const card = deck.pop();
+            if (!card) throw new Error("Deck ran out of cards unexpectedly!");
+            cards.push(card);
+        }
+        return cards;
+    }
+}
+

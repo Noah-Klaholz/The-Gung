@@ -1,38 +1,23 @@
 import { Hand } from 'pokersolver';
+import { Card } from "./utils/Card";
 
-export interface Card {
-    rank: string;
-    suit: string;
-}
-export function toSolverFormat(card: Card): string {
-    let r = card.rank;
-    // pokersolver erwartet 'T' für 10.
-    if (r === "10") r = "T";
-    r = r.toUpperCase();
 
-    // pokersolver erwartet 'h', 'd', 's', 'c' (kleingeschrieben)
-    const s = card.suit.charAt(0).toLowerCase();
+export function resolveGangHand(
+    pocketCards: Card[],
+    communityCards: Card[]
+) {
+    const pocketSolver = pocketCards.map(c => c.rank + c.suit);
+    const commSolver = communityCards.map(c => c.rank + c.suit);
 
-    return `${r}${s}`;
-}
-
-export function resolveGangHand(pocketCards: Card[], communityCards: Card[]): any {
-    const pocketSolver = pocketCards.map(toSolverFormat);
-    const commSolver = communityCards.map(toSolverFormat);
-
-    // Wir bewerten das Board alleine
     const boardHand = Hand.solve(commSolver);
-
-    // Wir bewerten das Board + die Handkarten des Spielers
     const combinedHand = Hand.solve([...pocketSolver, ...commSolver]);
 
     const winners = Hand.winners([boardHand, combinedHand]);
 
-    // Wenn es ein Tie ist (also winners.length === 2), spielt der Spieler exakt das Board.
     if (winners.length === 2) {
-        // Sonderregel greift: Er muss jetzt nur mit seinen Pocket Cards spielen!
         return Hand.solve(pocketSolver);
     }
+
     return combinedHand;
 }
 
