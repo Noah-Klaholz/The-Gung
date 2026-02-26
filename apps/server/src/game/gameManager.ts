@@ -1,4 +1,4 @@
-import { Lobby } from "../lobby/lobbyManager.ts";
+import type { Lobby } from "../lobby/lobbyManager.ts";
 import { gameLogic } from "./gameLogic.ts";
 
 interface ActiveGame {

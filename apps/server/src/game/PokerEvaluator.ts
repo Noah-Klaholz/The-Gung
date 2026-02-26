@@ -1,5 +1,7 @@
-import { Hand } from 'pokersolver';
-import { Card } from "./utils/Card.ts";
+import PokerSolver from 'pokersolver';
+import type { Card } from "./utils/Card.ts";
+
+const { Hand } = PokerSolver as any;
 
 
 export function resolveGangHand(
