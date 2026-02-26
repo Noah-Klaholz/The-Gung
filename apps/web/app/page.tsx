@@ -99,10 +99,11 @@ export default function RootPage() {
   };
 
   const handleToggleReady = () => {
-    socket.emit("TOGGLE_READY", { joinCode, playerId })
+    socket.emit("TOGGLE_READY", { joinCode, playerId});
   };
 
   const handleLeaveLobby = () => {
+    socket.emit("LEAVE_LOBBY", { joinCode, playerId })
     setActiveJoinCode(null);
     setJoinCode("");
     setIsJoining(false);
@@ -311,9 +312,8 @@ export default function RootPage() {
             <button
               disabled={!allPlayersReady}
               onClick={() => {
-                socket.emit("START_GAME", joinCode)
-                console.log("Start Game clicked")
-              }
+                socket.emit("START_GAME", { joinCode: activeJoinCode});
+                console.log("Start Game clicked")} 
               }
               className="w-full py-3 px-4 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -363,6 +363,7 @@ export function setupSocketHandlers(
   socket.off("LOBBY_CREATED");
   socket.off("LOBBY_JOINED");
   socket.off("ERROR");
+  socket.off("LOBBY_LEFT")
 
   socket.on("LOBBY_UPDATE", ({ players, maxPlayers }) => {
     console.log("Lobby update received:", players);
@@ -398,6 +399,11 @@ export function setupSocketHandlers(
     setActiveJoinCode(joinCode);
     setPlayerId(playerId);
     setCurrentView("WAITING_ROOM");
+  });
+
+  socket.on("LOBBY_LEFT", () => {
+    setActiveJoinCode("");
+    setCurrentView("SELECTION");
   });
 
   socket.on("ERROR", ({ message }) => {

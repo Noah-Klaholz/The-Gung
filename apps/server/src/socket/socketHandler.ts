@@ -43,6 +43,20 @@ export function setupSocketHandlers(io: Server) {
       emitLobbyUpdate(io, result.joinCode);
     });
 
+    socket.on("LEAVE_LOBBY", ({ joinCode, playerId }) => {
+      const result = lobbyManager.leaveLobby(joinCode, playerId);
+
+      if (!result) {
+        socket.emit("ERROR", { message: "Lobby not found" });
+        return;
+      }
+
+      socket.leave(result.joinCode);
+
+      socket.emit("LOBBY_LEFT", result);
+      emitLobbyUpdate(io, result.joinCode);
+    });
+
     socket.on("RECONNECT_PLAYER", ({ joinCode, playerId }) => {
       const success = lobbyManager.reconnectPlayerByCode(
         joinCode,
@@ -81,7 +95,12 @@ export function setupSocketHandlers(io: Server) {
       }
 
       emitLobbyUpdate(io, joinCode);
-    })
+    });
+
+    socket.on("disconnect", () => {
+      console.log("Disconnected", socket.id);
+      lobbyManager.handleDisconnect(socket.id);
+    });
   });
 }
 
