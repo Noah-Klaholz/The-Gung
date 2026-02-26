@@ -2,6 +2,7 @@ import { Server, Socket } from "socket.io";
 import { LobbyManager } from "../lobby/lobbyManager.ts";
 import { GameManager } from "../game/gameManager.ts";
 import { randomUUID } from "crypto";
+import type { ChipAction } from "../game/gameLogic.ts";
 
 const lobbyManager = new LobbyManager();
 const gameManager = new GameManager();
@@ -26,6 +27,10 @@ export function setupSocketHandlers(io: Server) {
           playerId: deviceId,
         });
         emitLobbyUpdate(io, lobby.joinCode);
+
+        if (lobby.status === "playing") {
+          emitGameUpdate(io, lobby.joinCode);
+        }
       }
     }
 
@@ -89,7 +94,40 @@ export function setupSocketHandlers(io: Server) {
       console.log("Starting game");
 
       io.to(joinCode).emit("GAME_STARTED");
+      emitGameUpdate(io, joinCode);
     });
+
+    socket.on(
+      "CHIP_ACTION",
+      ({ joinCode, playerId, action }: { joinCode: string; playerId: string; action: ChipAction }) => {
+        const lobby = lobbyManager.getLobbyByCode(joinCode);
+        if (!lobby) {
+          socket.emit("ERROR", { message: "Lobby not found" });
+          return;
+        }
+
+        const result = gameManager.applyChipAction(joinCode, playerId, action);
+
+        if (!result.ok) {
+          socket.emit("ERROR", { message: result.error ?? "Could not apply chip action" });
+          return;
+        }
+
+        if (result.heistResolved) {
+          io.to(joinCode).emit("HEIST_RESULT", result.heistResolved);
+        }
+
+        if (result.gameEnded) {
+          const winnerState = gameManager.getGameResult(joinCode);
+          io.to(joinCode).emit("GAME_ENDED", winnerState);
+
+          lobby.status = "waiting";
+          emitLobbyUpdate(io, joinCode);
+        }
+
+        emitGameUpdate(io, joinCode);
+      },
+    );
 
     socket.on("TOGGLE_READY", ({ joinCode, playerId }) => {
       const success = lobbyManager.setPlayerReady(joinCode, playerId);
@@ -143,9 +181,19 @@ function emitGameUpdate(io: Server, joinCode: string) {
   const game = gameManager.getGame(joinCode);
   if (!game) return;
 
-  io.to(joinCode).emit("GAME_UPDATE", {
-    /*game*/
-  }); // TODO actual gamestate here
+  const publicState = gameManager.getPublicState(joinCode);
+  if (!publicState) return;
+
+  for (const player of lobby.players.values()) {
+    if (!player.socketId) continue;
+
+    const privateState = gameManager.getPrivateState(joinCode, player.id);
+
+    io.to(player.socketId).emit("GAME_UPDATE", {
+      publicState,
+      privateState,
+    });
+  }
 }
 
 function emitChatUpdate(io: Server, joinCode: string, message: string, senderName: string) {
