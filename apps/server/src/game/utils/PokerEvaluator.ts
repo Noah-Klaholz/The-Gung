@@ -1,5 +1,5 @@
 import PokerSolver from 'pokersolver';
-import type { Card } from "./utils/Card.ts";
+import type { Card } from "./Card.ts";
 
 const { Hand } = PokerSolver as any;
 

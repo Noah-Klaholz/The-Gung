@@ -1,5 +1,5 @@
 import * as dm from "./DeckManager.ts";
-import * as pe from "./PokerEvaluator.ts";
+import * as pe from "./utils/PokerEvaluator.ts";
 import type { Card } from "./utils/Card.ts";
 import type { LobbyPlayer } from "../lobby/lobbyManager.ts";
 

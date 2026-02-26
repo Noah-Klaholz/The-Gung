@@ -1,6 +1,7 @@
 import { Server, Socket } from "socket.io";
 import { LobbyManager } from "../lobby/lobbyManager.ts";
 import { GameManager } from "../game/gameManager.ts";
+import { randomUUID } from "crypto";
 
 const lobbyManager = new LobbyManager();
 const gameManager = new GameManager();
@@ -105,6 +106,18 @@ export function setupSocketHandlers(io: Server) {
       console.log("Disconnected", socket.id);
       lobbyManager.handleDisconnect(socket.id);
     });
+
+    socket.on("CHAT_MESSAGE", ({ joinCode, lobbyId, message, senderName, playerName }) => {
+      const targetJoinCode = joinCode ?? lobbyId;
+      const sender = senderName ?? playerName ?? "Unknown";
+      const trimmedMessage = typeof message === "string" ? message.trim() : "";
+
+      if (!targetJoinCode || !trimmedMessage) {
+        return;
+      }
+
+      emitChatUpdate(io, targetJoinCode, trimmedMessage, sender);
+    });
   });
 }
 
@@ -133,4 +146,12 @@ function emitGameUpdate(io: Server, joinCode: string) {
   io.to(joinCode).emit("GAME_UPDATE", {
     /*game*/
   }); // TODO actual gamestate here
+}
+
+function emitChatUpdate(io: Server, joinCode: string, message: string, senderName: string) {
+  io.to(joinCode).emit("CHAT_MESSAGE", {
+    id: randomUUID(),
+    text: message,
+    sender: senderName,
+  });
 }

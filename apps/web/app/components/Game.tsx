@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { socket } from "../../lib/socket";
+import ChatBox from "./ChatBox";
 
 interface Card {
     rank: string;
@@ -313,29 +313,7 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                         </div>
                     </main>
 
-                    {/* CHAT BOX */}
-                    <section className="w-80 bg-zinc-950 rounded-3xl border border-zinc-800 shadow-2xl flex flex-col overflow-hidden">
-                        <div className="h-16 bg-zinc-900 border-b border-zinc-800 flex items-center px-6">
-                            <span className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">Comms channel</span>
-                            <div className="ml-auto w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]"></div>
-                        </div>
-
-                        {/* Messages */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col">
-                        </div>
-
-                        {/* Input */}
-                        <div className="p-4 bg-zinc-900/50 border-t border-zinc-800">
-                            <form className="relative flex items-center" onSubmit={(e) => e.preventDefault()}>
-                                <input
-                                    type="text"
-                                    placeholder="Nachricht senden..."
-                                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-zinc-600 transition-colors"
-                                />
-                                <button className="absolute right-2 text-zinc-500 hover:text-white transition-colors">➔</button>
-                            </form>
-                        </div>
-                    </section>
+                    <ChatBox className="w-80" joinCode={joinCode} />
 
                 </div>
             </div>
