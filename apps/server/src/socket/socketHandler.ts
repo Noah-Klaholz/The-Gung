@@ -57,22 +57,6 @@ export function setupSocketHandlers(io: Server) {
       emitLobbyUpdate(io, result.joinCode);
     });
 
-    socket.on("RECONNECT_PLAYER", ({ joinCode, playerId }) => {
-      const success = lobbyManager.reconnectPlayerByCode(
-        joinCode,
-        playerId,
-        socket.id,
-      );
-
-      if (!success) {
-        socket.emit("ERROR", { message: "Reconnection failed" });
-        return;
-      }
-
-      socket.join(joinCode);
-      emitLobbyUpdate(io, joinCode);
-    });
-
     socket.on("START_GAME", ({ joinCode }) => {
       const lobby = lobbyManager.getLobbyByCode(joinCode);
       if (!lobby) return;
@@ -93,7 +77,7 @@ export function setupSocketHandlers(io: Server) {
       );
 
       if (!success) {
-        socket.emit("ERROR", { message: "Reconnection failed" });
+        socket.emit("ERROR", { message: "Could not make ready" });
         return;
       }
 

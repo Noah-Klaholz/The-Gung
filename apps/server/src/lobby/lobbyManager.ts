@@ -26,6 +26,7 @@ const generateJoinCode = (length = 6) => {
   return result;
 };
 
+
 export class LobbyManager {
   private lobbiesById = new Map<string, Lobby>();
   private lobbiesByCode = new Map<string, Lobby>();
@@ -111,7 +112,6 @@ export class LobbyManager {
     }
   }
 
-  // Don't think this works yet
   reconnectPlayerByCode(joinCode: string, playerId: string, socketId: string) {
     const lobby = this.lobbiesByCode.get(joinCode);
     if (!lobby) return false;
