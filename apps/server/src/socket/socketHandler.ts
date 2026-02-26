@@ -78,6 +78,9 @@ export function setupSocketHandlers(io: Server) {
       if (!lobby) return;
 
       lobby.status = "playing";
+
+      //TODO: Start game here
+
       console.log("Starting game")
 
       io.to(joinCode).emit("GAME_STARTED");

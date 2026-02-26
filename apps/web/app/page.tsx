@@ -408,11 +408,16 @@ export function setupSocketHandlers(
 
   socket.on("ERROR", ({ message }) => {
     console.error("Socket error:", message);
-    setErrorMsg("Lobby nicht gefunden");
+    setErrorMsg(message);
     setCurrentView("SELECTION");
     setIsJoining(true);
     setTimeout(() => {
       setErrorMsg(null);
     }, 3000);
   });
+
+  socket.on("GAME_STARTED", () => {
+    console.log("Received Game Started");
+    setErrorMsg("Gase Started");
+  })
 }
