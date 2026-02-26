@@ -2,17 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { socket } from "../lib/socket";
-import { usePlayer } from "../lib/context/playerContext";
-
-interface Player {
-  id: string;
-  name: string;
-  isReady: boolean;
-  isHost?: boolean;
-}
+import { usePlayer, Player } from "../lib/context/playerContext";
 
 export default function RootPage() {
-  const { playerName, setPlayerName, playerId, setPlayerId } = usePlayer();
+  const { playerName, setPlayerName, playerId, setPlayerId, setPlayers, players } = usePlayer();
 
   const [currentView, setCurrentView] = useState<
     "LOGIN" | "SELECTION" | "WAITING_ROOM"
@@ -24,7 +17,6 @@ export default function RootPage() {
   const [joinCode, setJoinCode] = useState("");
 
   const [activeJoinCode, setActiveJoinCode] = useState<string | null>(null);
-  const [players, setPlayers] = useState<Player[]>([]);
 
   // Default limit is 6, will be updated via backend LOBBY_UPDATE event
   const [maxPlayers, setMaxPlayers] = useState(6);
@@ -93,10 +85,7 @@ export default function RootPage() {
   };
 
   const handleToggleReady = () => {
-    socket.emit("TOGGLE_READY", { joinCode, playerId})
-    setPlayers((prev) =>
-      prev.map((p) => (p.id === socket.id ? { ...p, isReady: !p.isReady } : p)),
-    );
+    socket.emit("TOGGLE_READY", { joinCode, playerId })
   };
 
   const handleLeaveLobby = () => {
@@ -292,11 +281,10 @@ export default function RootPage() {
                   {player.name}
                 </span>
                 <span
-                  className={`text-xs uppercase font-bold tracking-wider px-2 py-1 rounded ${
-                    player.isReady
+                  className={`text-xs uppercase font-bold tracking-wider px-2 py-1 rounded ${player.isReady
                       ? "text-green-500 bg-green-500/10 border border-green-500/20"
                       : "text-yellow-500 bg-yellow-500/10 border border-yellow-500/20"
-                  }`}
+                    }`}
                 >
                   {player.isReady ? "Ready" : "Waiting"}
                 </span>
@@ -310,7 +298,8 @@ export default function RootPage() {
               disabled={!allPlayersReady}
               onClick={() => {
                 socket.emit("START_GAME", joinCode)
-                console.log("Start Game clicked")} 
+                console.log("Start Game clicked")
+              }
               }
               className="w-full py-3 px-4 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -319,11 +308,10 @@ export default function RootPage() {
           )}
           <button
             onClick={handleToggleReady}
-            className={`w-full py-4 px-4 font-bold rounded-lg transition-colors uppercase tracking-widest ${
-              isCurrentUserReady
+            className={`w-full py-4 px-4 font-bold rounded-lg transition-colors uppercase tracking-widest ${isCurrentUserReady
                 ? "bg-green-600 hover:bg-green-500 text-white"
                 : "bg-white hover:bg-neutral-200 text-black"
-            }`}
+              }`}
           >
             {isCurrentUserReady ? "Not Ready" : "Ready"}
           </button>

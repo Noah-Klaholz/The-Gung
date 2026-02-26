@@ -9,6 +9,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "pokersolver": "^2.1.4",
     "socket.io": "^4.7.5",
     "uuid": "^9.0.1"
   },
