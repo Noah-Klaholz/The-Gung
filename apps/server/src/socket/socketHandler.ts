@@ -12,7 +12,7 @@ export function setupSocketHandlers(io: Server) {
     console.log(" Connected:", socket.id);
 
     // Auto-reconnect if deviceId is provided
-    const deviceId = socket.handshake.auth.deviceId; // deviceID is used as playerID to allow clean reconnect
+    const deviceId = socket.handshake.auth.deviceId;
     if (deviceId) {
       const lobby = lobbyManager.findLobbyByPlayerId(deviceId);
       if (lobby) {
@@ -91,10 +91,13 @@ export function setupSocketHandlers(io: Server) {
 
       gameManager.startGame(lobby);
 
-      console.log("Starting game");
+      console.log("Starting game for lobby", joinCode);
 
       io.to(joinCode).emit("GAME_STARTED");
       emitGameUpdate(io, joinCode);
+
+      // Send initial game state after a short delay (helps with sync issues) 
+      setTimeout(() => emitGameUpdate(io, joinCode), 200);
     });
 
     socket.on(
@@ -156,6 +159,10 @@ export function setupSocketHandlers(io: Server) {
 
       emitChatUpdate(io, targetJoinCode, trimmedMessage, sender);
     });
+
+    socket.on("REQUEST_GAME_STATE", ({ joinCode }) => {
+      emitGameUpdate(io, joinCode);
+    });
   });
 }
 
@@ -178,8 +185,8 @@ function emitGameUpdate(io: Server, joinCode: string) {
   const lobby = lobbyManager.getLobbyByCode(joinCode);
   if (!lobby) return;
 
-  const game = gameManager.getGame(joinCode);
-  if (!game) return;
+  const activeGame = gameManager.getGame(joinCode);
+  if (!activeGame) return;
 
   const publicState = gameManager.getPublicState(joinCode);
   if (!publicState) return;

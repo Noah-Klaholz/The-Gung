@@ -48,16 +48,16 @@ export type GamePhase =
 
 export type ChipAction =
   | {
-      type: "take_center";
-      star: number;
-    }
+    type: "take_center";
+    star: number;
+  }
   | {
-      type: "take_player";
-      fromPlayerId: string;
-    }
+    type: "take_player";
+    fromPlayerId: string;
+  }
   | {
-      type: "return_own";
-    };
+    type: "return_own";
+  };
 
 interface RoundConfig {
   phase: Extract<GamePhase, "pre-flop" | "flop" | "turn" | "river">;
@@ -104,18 +104,14 @@ export class gameLogic {
     dm.shuffleDeck(this.deck);
 
     this.communityCards = [];
-
     this.roundChips = [];
 
     this.successes = 0;
     this.failures = 0;
-
     this.heistNumber = 0;
     this.revision = 0;
     this.lastHeistResult = null;
-
     this.roundIndex = 0;
-
     this.phase = "init";
   }
 

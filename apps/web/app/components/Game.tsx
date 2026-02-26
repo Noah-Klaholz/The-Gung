@@ -1,11 +1,42 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import ChatBox from "./ChatBox";
+import { socket } from "../../lib/socket";
 
 interface Card {
     rank: string;
     suit: string;
+}
+
+interface PlayerChips {
+    white: number | null;
+    yellow: number | null;
+    orange: number | null;
+    red: number | null;
+}
+
+interface GamePlayerState {
+    id: string;
+    name: string;
+    chips: PlayerChips;
+}
+
+interface ShowdownPlayerResult {
+    playerId: string;
+    playerName: string;
+    redChip: number;
+    handName: string;
+    handDescription: string;
+    trueRank: number;
+}
+
+interface HeistResult {
+    heistNumber: number;
+    success: boolean;
+    orderedShowdown: ShowdownPlayerResult[];
+    successes: number;
+    failures: number;
 }
 
 interface GameProps {
@@ -14,63 +45,139 @@ interface GameProps {
     onLeave: () => void;
 }
 
-// Mock showdown players sorted by chip bid (lowest first = revealed first)
-const showdownPlayers = [
-    { id: "1", name: "Player One", chip: 1, hand: "High Card", cards: [{ rank: "2", suit: "clubs" }, { rank: "7", suit: "spades" }] },
-    { id: "2", name: "Player Two", chip: 2, hand: "One Pair", cards: [{ rank: "J", suit: "hearts" }, { rank: "J", suit: "diamonds" }] },
-    { id: "3", name: "Player Three", chip: 3, hand: "Two Pair", cards: [{ rank: "A", suit: "spades" }, { rank: "K", suit: "hearts" }] },
-    { id: "4", name: "Player Four", chip: 4, hand: "Full House", cards: [{ rank: "Q", suit: "clubs" }, { rank: "Q", suit: "hearts" }] },
-    { id: "5", name: "Player Five", chip: 5, hand: "Straight Flush", cards: [{ rank: "9", suit: "spades" }, { rank: "8", suit: "spades" }] },
-    { id: "6", name: "Player Six", chip: 6, hand: "Royal Flush", cards: [{ rank: "A", suit: "hearts" }, { rank: "K", suit: "hearts" }] },
-];
+// Convert backend card format (suit: "h"/"d"/"c"/"s", rank: "T") to frontend format
+function convertCard(card: any): Card | null {
+    if (!card) return null;
+    const suitMap: Record<string, string> = { h: "hearts", d: "diamonds", c: "clubs", s: "spades" };
+    const rank = card.rank === "T" ? "10" : card.rank;
+    const suit = suitMap[card.suit] ?? card.suit;
+    return { rank, suit };
+}
 
 export default function Game({ playerId, joinCode, onLeave }: GameProps) {
+    // Server-driven state
+    const [phase, setPhase] = useState("PRE-FLOP");
+    const [communityCards, setCommunityCards] = useState<(Card | null)[]>([null, null, null, null, null]);
+    const [myCards, setMyCards] = useState<Card[]>([]);
+    const [players, setPlayers] = useState<GamePlayerState[]>([]);
+    const [roundChips, setRoundChips] = useState<number[]>([]);
+    const [selectedChip, setSelectedChip] = useState<number | null>(null);
+    const [successes, setSuccesses] = useState(0);
+    const [failures, setFailures] = useState(0);
+    const [heistNumber, setHeistNumber] = useState(0);
+
+    // Heist result / Showdown state
     const [showShowdown, setShowShowdown] = useState(false);
+    const [heistResult, setHeistResult] = useState<HeistResult | null>(null);
     const [revealedCount, setRevealedCount] = useState(0);
 
-    // Mock State for UI demonstration
-    const [vaults, setVaults] = useState("1/3");
-    const [alarms, setAlarms] = useState("0/3");
-    const [phase, setPhase] = useState("FLOP");
+    // Game over state
+    const [gameOver, setGameOver] = useState<{ won: boolean; successes: number; failures: number } | null>(null);
 
-    // When showdown opens, start sequential reveal
+    // Socket listeners
     useEffect(() => {
-        if (!showShowdown) { setRevealedCount(0); return; }
+        const handleGameUpdate = (data: any) => {
+            const pub = data.publicState;
+            const priv = data.privateState;
+
+            if (pub) {
+                setPhase((pub.phase ?? "pre-flop").toUpperCase());
+                setSuccesses(pub.successes ?? 0);
+                setFailures(pub.failures ?? 0);
+                setHeistNumber(pub.heistNumber ?? 0);
+                setRoundChips(pub.roundChips ?? []);
+
+                // Community cards: backend sends Card[] (already sliced), pad to 5
+                const visible = (pub.communityCards ?? []).map((c: any) => convertCard(c));
+                const padded: (Card | null)[] = [...visible];
+                while (padded.length < 5) padded.push(null);
+                setCommunityCards(padded);
+
+                setPlayers((pub.players ?? []).map((p: any) => ({
+                    id: p.id,
+                    name: p.name,
+                    chips: p.chips ?? { white: null, yellow: null, orange: null, red: null },
+                })));
+            }
+
+            if (priv) {
+                setMyCards((priv.hand ?? []).map((c: any) => convertCard(c)).filter(Boolean) as Card[]);
+            }
+
+            setSelectedChip(null);
+        };
+
+        const handleHeistResult = (data: HeistResult) => {
+            setHeistResult(data);
+            setShowShowdown(true);
+        };
+
+        const handleGameEnded = (data: any) => {
+            setGameOver(data);
+        };
+
+        socket.on("GAME_UPDATE", handleGameUpdate);
+        socket.on("HEIST_RESULT", handleHeistResult);
+        socket.on("GAME_ENDED", handleGameEnded);
+        socket.emit("REQUEST_GAME_STATE", { joinCode });
+
+        return () => {
+            socket.off("GAME_UPDATE", handleGameUpdate);
+            socket.off("HEIST_RESULT", handleHeistResult);
+            socket.off("GAME_ENDED", handleGameEnded);
+        };
+    }, [joinCode, playerId]);
+
+    // Sequential reveal animation for showdown
+    useEffect(() => {
+        if (!showShowdown || !heistResult) { setRevealedCount(0); return; }
         setRevealedCount(0);
         let i = 0;
+        const total = heistResult.orderedShowdown.length;
         const interval = setInterval(() => {
             i++;
             setRevealedCount(i);
-            if (i >= showdownPlayers.length) clearInterval(interval);
+            if (i >= total) clearInterval(interval);
         }, 900);
         return () => clearInterval(interval);
-    }, [showShowdown]);
+    }, [showShowdown, heistResult]);
 
-    // Dummy data for visual representation
-    const communityCards: (Card | null)[] = [
-        { rank: "A", suit: "hearts" },
-        { rank: "10", suit: "spades" },
-        { rank: "J", suit: "hearts" },
-        null,
-        null
-    ];
+    // Chip actions
+    const handleChipSelect = (star: number) => {
+        setSelectedChip(star);
+    };
 
-    const myCards: Card[] = [
-        { rank: "Q", suit: "hearts" },
-        { rank: "K", suit: "hearts" }
-    ];
+    const handleConfirmChip = () => {
+        if (selectedChip === null) return;
+        socket.emit("CHIP_ACTION", {
+            joinCode,
+            playerId,
+            action: { type: "take_center", star: selectedChip },
+        });
+        setSelectedChip(null);
+    };
 
-    const players = [
-        { id: "1", name: "Player One", rounds: ["1", "Free", "", ""] },
-        { id: "2", name: "Player Two", rounds: ["2", "1", "", ""] },
-        { id: "3", name: "Player Three", rounds: ["Free", "2", "", ""] },
-    ];
+    const handleReturnChip = () => {
+        socket.emit("CHIP_ACTION", {
+            joinCode,
+            playerId,
+            action: { type: "return_own" },
+        });
+    };
 
-    const MAX_CHIPS = 6;
-    const availableChips = Array.from({ length: MAX_CHIPS }, (_, i) =>
-        i < players.length ? String(i + 1) : null
-    );
+    // Get current player's chip for the current color
+    const chipColors: ("white" | "yellow" | "orange" | "red")[] = ["white", "yellow", "orange", "red"];
+    const phaseToColor: Record<string, "white" | "yellow" | "orange" | "red"> = {
+        "PRE-FLOP": "white",
+        "FLOP": "yellow",
+        "TURN": "orange",
+        "RIVER": "red",
+    };
+    const currentColor = phaseToColor[phase] ?? "white";
+    const myPlayerState = players.find(p => p.id === playerId);
+    const myCurrentChip = myPlayerState?.chips[currentColor] ?? null;
 
+    // UI Helpers
     const phaseColorMap: Record<string, string> = {
         "PRE-FLOP": "bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.4)]",
         "FLOP": "bg-yellow-400 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]",
@@ -119,37 +226,35 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
 
     return (
         <div className="min-h-screen bg-black text-white flex items-center justify-center p-4 overflow-hidden relative">
-            {/* Background Gradient */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-from)_0%,_var(--tw-gradient-via)_40%,_black_100%)] from-zinc-800 via-zinc-950 opacity-100 z-0" />
 
-            {/* Main Container */}
             <div className="relative z-10 w-full max-w-[1450px] h-[95vh] flex flex-col gap-4">
 
-                {/* HEADER SECTION */}
                 <header className="flex items-center justify-between h-20 px-6">
                     <div className="text-3xl font-black bg-gradient-to-r from-red-500 via-yellow-500 to-orange-500 bg-clip-text text-transparent tracking-tighter italic">
                         THE GUNG
                     </div>
-
-                    <div className="w-32" /> {/* Spacer */}
+                    <div className="w-32" />
                 </header>
 
-                {/* MAIN GAME AREA */}
                 <div className="flex-1 flex gap-4 overflow-hidden">
 
-                    {/* GAME BOARD */}
                     <main className="flex-1 bg-zinc-950 rounded-3xl border border-zinc-800 shadow-2xl flex flex-col overflow-hidden">
 
                         {/* Top Campaign Bar */}
                         <div className="h-16 bg-zinc-900 flex items-center justify-between px-8 border-b border-zinc-800">
                             <div className="flex gap-8">
                                 <div className="flex items-center gap-2">
+                                    <span className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Heist:</span>
+                                    <span className="text-yellow-500 font-black">{heistNumber}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
                                     <span className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Vaults:</span>
-                                    <span className="text-yellow-500 font-black drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]">{vaults}</span>
+                                    <span className="text-green-500 font-black drop-shadow-[0_0_8px_rgba(34,197,94,0.5)]">{successes}/3</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Alarms:</span>
-                                    <span className="text-red-500 font-black drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]">{alarms}</span>
+                                    <span className="text-red-500 font-black drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]">{failures}/3</span>
                                 </div>
                             </div>
 
@@ -196,22 +301,23 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                                     {players.map(p => (
                                         <div key={p.id} className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/50">
-                                            <div className="text-xs font-bold mb-3 truncate">{p.name}</div>
+                                            <div className="text-xs font-bold truncate mb-3">{p.name}</div>
                                             <div className="flex gap-2">
-                                                {p.rounds.map((chip, idx) => {
-                                                    const phaseColors: Record<number, string> = {
-                                                        0: "bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.5)]",
-                                                        1: "bg-yellow-400 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]",
-                                                        2: "bg-orange-500 text-white shadow-[0_0_10px_rgba(249,115,22,0.5)]",
-                                                        3: "bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.5)]",
+                                                {chipColors.map((color) => {
+                                                    const chip = p.chips[color];
+                                                    const colorStyles: Record<string, string> = {
+                                                        white: "bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.5)]",
+                                                        yellow: "bg-yellow-400 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]",
+                                                        orange: "bg-orange-500 text-white shadow-[0_0_10px_rgba(249,115,22,0.5)]",
+                                                        red: "bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.5)]",
                                                     };
-                                                    const colorClass = chip ? (phaseColors[idx] ?? "bg-zinc-700 text-zinc-300") : "bg-transparent border-dashed";
+                                                    const style = chip !== null ? colorStyles[color] : "bg-transparent border-dashed";
                                                     return (
                                                         <div
-                                                            key={idx}
-                                                            className={`w-8 h-8 rounded-full border border-zinc-800 flex items-center justify-center text-[10px] font-bold ${colorClass}`}
+                                                            key={color}
+                                                            className={`w-8 h-8 rounded-full border border-zinc-800 flex items-center justify-center text-[10px] font-bold ${style}`}
                                                         >
-                                                            {chip === "Free" ? "F" : chip}
+                                                            {chip ?? ""}
                                                         </div>
                                                     );
                                                 })}
@@ -224,7 +330,6 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                             {/* Center: The Heist */}
                             <div className="flex-1 relative flex flex-col">
 
-                                {/* Table Background */}
                                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(20,83,45,0.2)_0%,_transparent_70%)] pointer-events-none" />
 
                                 {/* Community Cards */}
@@ -249,44 +354,67 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                 </div>
 
                                 {/* Middle Action Bar */}
-                                <div className="h-24 bg-zinc-900/80 backdrop-blur-md border-t border-zinc-800 flex items-center justify-end px-8 relative">
+                                <div className="h-24 bg-zinc-900/80 backdrop-blur-md border-t border-zinc-800 flex items-center justify-between px-8 relative">
 
-                                    {/* Active Selection Display – centered */}
+                                    {/* Return chip button (left) */}
+                                    {myCurrentChip !== null && (
+                                        <button
+                                            onClick={handleReturnChip}
+                                            className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 font-bold text-[10px] uppercase tracking-widest rounded-lg transition-all text-zinc-400 hover:text-white"
+                                        >
+                                            Return ✕
+                                        </button>
+                                    )}
+                                    {myCurrentChip === null && <div />}
+
+                                    {/* Active Selection Display (center) */}
                                     <div className="absolute left-1/2 -translate-x-1/2 w-16 h-16 rounded-full border-4 border-dashed border-zinc-700 flex items-center justify-center">
-                                        <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center text-xl font-black shadow-[0_0_20px_rgba(220,38,38,0.5)]">2</div>
+                                        {(selectedChip ?? myCurrentChip) !== null ? (
+                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-black shadow-[0_0_20px_rgba(220,38,38,0.5)] ${currentChipColor}`}>
+                                                {selectedChip ?? myCurrentChip}
+                                            </div>
+                                        ) : (
+                                            <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-600 text-xs font-bold">
+                                                ?
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {/* Vote Button – right corner */}
+                                    {/* Confirm Chip Button (right) */}
                                     <div className="flex flex-col items-end gap-1">
-                                        <button className="px-4 py-2 bg-green-700 hover:bg-green-600 font-black text-[10px] uppercase tracking-widest rounded-lg transition-all shadow-[0_0_12px_rgba(22,163,74,0.3)]">
-                                            Start Vote ▶
+                                        <button
+                                            onClick={handleConfirmChip}
+                                            disabled={selectedChip === null}
+                                            className="px-4 py-2 bg-green-700 hover:bg-green-600 font-black text-[10px] uppercase tracking-widest rounded-lg transition-all shadow-[0_0_12px_rgba(22,163,74,0.3)] disabled:opacity-40 disabled:cursor-not-allowed"
+                                        >
+                                            Confirm ▶
                                         </button>
-                                        <span className="text-[10px] font-bold text-zinc-500">Votes: 1 / 3</span>
                                     </div>
                                 </div>
 
                                 {/* Bottom Player Area */}
                                 <div className="h-48 bg-zinc-950 flex flex-col justify-end p-8 relative">
 
-                                    {/* Chip Pool – repositioned */}
+                                    {/* Chip Pool */}
                                     <div className="absolute left-8 -top-24">
                                         <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Available Chips</div>
-                                        <div className="grid grid-cols-3 gap-3">
-                                            {availableChips.map((chip, idx) => (
-                                                <div key={idx} className="flex flex-col items-center gap-1">
-                                                    {chip !== null ? (
-                                                        <button className={`w-12 h-12 rounded-full border-2 border-transparent flex items-center justify-center text-sm font-black transition-all hover:scale-110 active:scale-90 ${currentChipColor}`}>
-                                                            {chip}
-                                                        </button>
-                                                    ) : (
-                                                        <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center opacity-40" />
-                                                    )}
-                                                </div>
+                                        <div className="flex gap-3 flex-wrap">
+                                            {roundChips.map((chip) => (
+                                                <button
+                                                    key={chip}
+                                                    onClick={() => handleChipSelect(chip)}
+                                                    className={`w-12 h-12 rounded-full border-2 flex items-center justify-center text-sm font-black transition-all hover:scale-110 active:scale-90 ${selectedChip === chip
+                                                        ? "border-yellow-400 ring-2 ring-yellow-400/50 " + currentChipColor
+                                                        : "border-transparent " + currentChipColor
+                                                        }`}
+                                                >
+                                                    {chip}
+                                                </button>
                                             ))}
                                         </div>
                                     </div>
 
-                                    {/* Hand Cards (Centered) */}
+                                    {/* Hand Cards */}
                                     <div className="flex justify-center gap-2 -mb-20">
                                         {myCards.map((card, idx) => (
                                             <div key={idx} className="w-24 h-36 bg-white rounded-lg shadow-2xl transition-all hover:-translate-y-8 cursor-pointer relative overflow-hidden group">
@@ -301,14 +429,12 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                                         <span className="text-xs">{getSuitSymbol(card.suit)}</span>
                                                     </div>
                                                 </div>
-                                                {/* Shimmer Effect */}
                                                 <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                                             </div>
                                         ))}
                                     </div>
 
                                 </div>
-
                             </div>
                         </div>
                     </main>
@@ -318,35 +444,33 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                 </div>
             </div>
 
-            {/* ── SHOWDOWN OVERLAY ─────────────────────────────────── */}
-            {showShowdown && (
+            {/* HEIST RESULT / SHOWDOWN OVERLAY */}
+            {showShowdown && heistResult && (
                 <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col p-6 gap-6 overflow-hidden">
 
-                    {/* Header */}
                     <header className="flex items-center justify-between shrink-0">
-                        <h2 className="text-4xl font-black italic bg-gradient-to-r from-yellow-300 to-yellow-600 bg-clip-text text-transparent tracking-tighter">
-                            FINAL SHOWDOWN
-                        </h2>
+                        <div>
+                            <h2 className="text-4xl font-black italic bg-gradient-to-r from-yellow-300 to-yellow-600 bg-clip-text text-transparent tracking-tighter">
+                                HEIST #{heistResult.heistNumber} — {heistResult.success ? "VAULT CRACKED! ✅" : "ALARM TRIGGERED! ❌"}
+                            </h2>
+                            <p className="text-sm text-zinc-400 mt-1">
+                                Vaults: {heistResult.successes}/3 · Alarms: {heistResult.failures}/3
+                            </p>
+                        </div>
                         <button
                             onClick={() => setShowShowdown(false)}
                             className="px-8 py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase tracking-widest text-xs rounded-xl shadow-[0_0_30px_rgba(234,179,8,0.3)] transition-all"
                         >
-                            Close Results
+                            Continue
                         </button>
                     </header>
 
-                    {/* 6-card grid – all fit in one row */}
-                    <div className="flex-1 grid gap-3 items-stretch" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
-                        {showdownPlayers.map((p, idx) => {
+                    <div className="flex-1 grid gap-3 items-stretch" style={{ gridTemplateColumns: `repeat(${heistResult.orderedShowdown.length}, 1fr)` }}>
+                        {heistResult.orderedShowdown.map((p, idx) => {
                             const revealed = idx < revealedCount;
-                            const isWinner = idx === showdownPlayers.length - 1;
+                            const isLast = idx === heistResult.orderedShowdown.length - 1;
                             return (
-                                <div
-                                    key={p.id}
-                                    className="relative"
-                                    style={{ perspective: '800px' }}
-                                >
-                                    {/* Card wrapper – flips on reveal */}
+                                <div key={p.playerId} className="relative" style={{ perspective: '800px' }}>
                                     <div
                                         className="w-full h-full transition-transform duration-700"
                                         style={{
@@ -354,79 +478,29 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                             transform: revealed ? 'rotateY(0deg)' : 'rotateY(90deg)',
                                         }}
                                     >
-                                        <div className={`
-                                            w-full h-full rounded-2xl border flex flex-col p-4 gap-3 shadow-2xl
-                                            ${isWinner && revealed
-                                                ? 'bg-yellow-950/60 border-yellow-500/60 shadow-yellow-500/20'
-                                                : 'bg-zinc-900/70 border-zinc-800'
-                                            }
-                                        `}>
-                                            {/* Rank badge */}
-                                            <div className={`
-                                                self-start px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest
-                                                ${isWinner ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-zinc-400'}
-                                            `}>
-                                                Chip {p.chip}
+                                        <div className={`w-full h-full rounded-2xl border flex flex-col p-4 gap-3 shadow-2xl ${isLast && revealed ? 'bg-yellow-950/60 border-yellow-500/60 shadow-yellow-500/20' : 'bg-zinc-900/70 border-zinc-800'}`}>
+                                            <div className={`self-start px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${isLast ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-zinc-400'}`}>
+                                                Rank {p.trueRank} · Chip {p.redChip}
                                             </div>
 
-                                            {/* Player name */}
                                             <div className="font-black text-sm uppercase tracking-tight truncate text-white">
-                                                {p.name}
+                                                {p.playerName}
                                             </div>
 
-                                            {/* Community cards (river) */}
-                                            <div className="flex gap-1 justify-center">
-                                                {communityCards.map((card, ci) => (
-                                                    <div key={ci} className={`w-8 h-11 rounded flex-shrink-0 relative overflow-hidden ${card ? 'bg-white shadow' : 'bg-zinc-800 border border-dashed border-zinc-700'}`}>
-                                                        {card && (
-                                                            <>
-                                                                <div className={`absolute top-0.5 left-0.5 text-[7px] font-black leading-none ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
-                                                                    {card.rank}
-                                                                </div>
-                                                                <div className={`absolute inset-0 flex items-center justify-center text-sm ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-zinc-800'}`}>
-                                                                    {getSuitSymbol(card.suit)}
-                                                                </div>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                ))}
+                                            <div className={`text-center text-xs font-black uppercase tracking-widest ${isLast ? 'text-yellow-400' : 'text-zinc-400'}`}>
+                                                {p.handName}
                                             </div>
 
-                                            {/* Hand cards */}
-                                            <div className="flex gap-1.5 justify-center items-center">
-                                                {p.cards.map((card, ci) => (
-                                                    <div key={ci} className="w-14 h-20 bg-white rounded-lg shadow-xl relative overflow-hidden flex-shrink-0">
-                                                        {/* Top corner */}
-                                                        <div className={`absolute top-1 left-1 text-xs font-black leading-none ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
-                                                            {card.rank}<br />
-                                                            <span className="text-[9px]">{getSuitSymbol(card.suit)}</span>
-                                                        </div>
-                                                        {/* Center symbol */}
-                                                        <div className={`absolute inset-0 flex items-center justify-center text-3xl ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500 opacity-20' : 'text-zinc-800 opacity-15'}`}>
-                                                            {getSuitSymbol(card.suit)}
-                                                        </div>
-                                                        {/* Bottom corner */}
-                                                        <div className={`absolute bottom-1 right-1 rotate-180 text-xs font-black leading-none ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
-                                                            {card.rank}<br />
-                                                            <span className="text-[9px]">{getSuitSymbol(card.suit)}</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                            <div className="text-center text-[10px] text-zinc-500">
+                                                {p.handDescription}
                                             </div>
 
-                                            {/* Hand name */}
-                                            <div className={`text-center text-xs font-black uppercase tracking-widest ${isWinner ? 'text-yellow-400' : 'text-zinc-400'}`}>
-                                                {p.hand}
-                                            </div>
-
-                                            {/* Winner crown */}
-                                            {isWinner && revealed && (
+                                            {isLast && revealed && (
                                                 <div className="text-center text-2xl animate-bounce">👑</div>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* Still-hidden back face */}
                                     {!revealed && (
                                         <div className="absolute inset-0 rounded-2xl bg-zinc-900 border border-zinc-700 flex items-center justify-center">
                                             <span className="text-5xl opacity-20">🂠</span>
@@ -439,13 +513,25 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                 </div>
             )}
 
-            {/* Button to toggle showdown UI for testing */}
-            <button
-                onClick={() => setShowShowdown(true)}
-                className="fixed top-4 right-4 z-40 px-3 py-1 bg-zinc-800 text-[8px] font-bold text-zinc-500 rounded uppercase tracking-widest hover:text-white transition-colors"
-            >
-                Debug Overlay
-            </button>
+            {/* GAME OVER OVERLAY */}
+            {gameOver && (
+                <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center">
+                    <div className="text-center space-y-6">
+                        <h2 className={`text-6xl font-black italic ${gameOver.won ? 'text-green-400' : 'text-red-500'}`}>
+                            {gameOver.won ? "🎉 HEIST COMPLETE!" : "🚨 BUSTED!"}
+                        </h2>
+                        <p className="text-xl text-zinc-400">
+                            Vaults: {gameOver.successes}/3 · Alarms: {gameOver.failures}/3
+                        </p>
+                        <button
+                            onClick={onLeave}
+                            className="px-8 py-3 bg-white hover:bg-zinc-200 text-black font-black uppercase tracking-widest text-sm rounded-xl transition-all"
+                        >
+                            Back to Lobby
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Leave Game Button */}
             <button
@@ -457,4 +543,3 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
         </div>
     );
 }
-
