@@ -23,7 +23,7 @@ export function resolveGangHand(
     return combinedHand;
 }
 
-//Gibt saubere Infos über die beste Hand des Spielers zurück.
+// Returns clean information about the player's best hand.
 export function evaluateBestHand(pocketCards: Card[], communityCards: Card[]) {
     const hand = resolveGangHand(pocketCards, communityCards);
     return {
@@ -33,7 +33,7 @@ export function evaluateBestHand(pocketCards: Card[], communityCards: Card[]) {
         cards: hand.cards.map((c: any) => c.value + c.suit) as string[]
     };
 }
-//Vergleicht zwei Spieler miteinander.
+// Compares two players against each other.
 
 export function isHandBetterStrictly(handAPocket: Card[], handBPocket: Card[], communityCards: Card[]): boolean {
     const handA = resolveGangHand(handAPocket, communityCards);
@@ -42,7 +42,7 @@ export function isHandBetterStrictly(handAPocket: Card[], handBPocket: Card[], c
     return winners.length === 1 && winners[0] === handA;
 }
 
-//Erstellt die Reihenfolge der Spieler.
+// Builds the ordering validation for player hands.
 export function evaluateShowdownSequence(orderedPlayerHands: Card[][], communityCards: Card[]): boolean {
     if (orderedPlayerHands.length <= 1) return true;
 
@@ -59,9 +59,9 @@ export function evaluateShowdownSequence(orderedPlayerHands: Card[][], community
 }
 
 /**
- * Generiert die Rankings für alle Spieler.
- * Schwächste Hand = Rang 1.
- * Gleiche Hände bekommen den exakt gleichen trueRank.
+ * Generates rankings for all players.
+ * Weakest hand = rank 1.
+ * Equal hands receive the exact same trueRank.
  */
 export function generateTrueRanks(
     playerHands: { playerId: string; pocket: Card[] }[],

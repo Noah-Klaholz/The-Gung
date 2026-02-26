@@ -163,7 +163,7 @@ export default function RootPage() {
             onChange={(e) => setName(e.target.value)}
             maxLength={25}
             className="w-full bg-black border border-neutral-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-white transition-colors placeholder:text-neutral-600"
-            placeholder="Dein Name..."
+            placeholder="Your name..."
             required
             autoComplete="off"
           />
@@ -217,7 +217,7 @@ export default function RootPage() {
               value={joinInput}
               onChange={(e) => setJoinInput(e.target.value)}
               className="w-full bg-black border border-neutral-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-white transition-colors placeholder:text-neutral-600 font-mono tracking-wider"
-              placeholder="z.B. 123456"
+              placeholder="e.g. 123456"
               required
               autoComplete="off"
             />
@@ -238,7 +238,7 @@ export default function RootPage() {
               onClick={() => setIsJoining(false)}
               className="w-full py-2 px-4 bg-transparent text-neutral-400 font-medium hover:text-white transition-colors uppercase tracking-wider text-xs underline underline-offset-4"
             >
-              Abbrechen
+              Cancel
             </button>
           </div>
         </form>
@@ -297,7 +297,7 @@ export default function RootPage() {
                 onClick={() => activeJoinCode && socket.emit("START_GAME", { joinCode: activeJoinCode })}
                 className="w-full py-3 px-4 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-colors uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Spiel Starten
+                Start Game
               </button>
             )}
             <button

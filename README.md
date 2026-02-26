@@ -1,133 +1,133 @@
 # The Gung
 
-Lokale Multiplayer-Umsetzung von **The Gang** (Poker-Koop mit verdeckter Information), bestehend aus:
+A local multiplayer implementation of **The Gang** (co-op poker with hidden information), consisting of:
 
-- `apps/server`: Socket.IO-Server + Spiellogik
-- `apps/web`: Next.js-Frontend
+- `apps/server`: Socket.IO server + game logic
+- `apps/web`: Next.js frontend
 
-Der Host startet das Spiel lokal und andere Geräte im selben Netzwerk können beitreten.
+The host starts the game locally and other devices on the same network can join.
 
-## Für Spieler: lokal hosten & spielen
+## For players: host & play locally
 
-### Voraussetzungen
+### Requirements
 
 - Node.js 20+
 - npm 10+
-- Geräte im selben LAN/WLAN
+- Devices on the same LAN/Wi-Fi
 
-### 1) Installation
+### 1) Install
 
 ```bash
 npm install
 ```
 
-### 2) Starten
+### 2) Start
 
 ```bash
 npm run dev
 ```
 
-Das startet gleichzeitig:
+This starts both services at the same time:
 
-- Web-App auf Port `3000`
-- Socket-Server auf Port `9000`
+- Web app on port `3000`
+- Socket server on port `9000`
 
-### 3) Verbinden
+### 3) Connect
 
-- Host öffnet `http://localhost:3000`
-- Mitspieler öffnen `http://<HOST-IP>:3000` (z.B. `http://192.168.178.42:3000`)
+- Host opens `http://localhost:3000`
+- Other players open `http://<HOST-IP>:3000` (e.g. `http://192.168.178.42:3000`)
 
-> Hinweis: Der Client verbindet sich automatisch zu `http://<aktueller-hostname>:9000`, daher muss Port `9000` im lokalen Netzwerk erreichbar sein.
+> Note: The client connects automatically to `http://<current-hostname>:9000`, so port `9000` must be reachable in your local network.
 
-### 4) Spielablauf (kurz)
+### 4) Gameplay flow (short)
 
-1. Namen eingeben
-2. Lobby erstellen oder per Join-Code beitreten
-3. Alle auf **Ready**
-4. Host startet das Spiel
-5. In jeder Phase Chips verteilen (Center nehmen, Chip zurückgeben, Chip von Spieler nehmen)
-6. Ziel: 3 erfolgreiche Überfälle vor 3 Fehlversuchen
+1. Enter names
+2. Create a lobby or join via join code
+3. Everyone clicks **Ready**
+4. Host starts the game
+5. In each phase, distribute chips (take from center, return own chip, take chip from another player)
+6. Goal: 3 successful heists before 3 failed attempts
 
 ### Troubleshooting
 
-- `EADDRINUSE` auf Port `9000`: anderer Prozess blockiert Port oder mit `SERVER_PORT=<port>` starten.
-- Mitspieler sehen Host nicht: Host-IP prüfen, Firewall für `3000`/`9000` freigeben.
-- Leerer Screen nach Reconnect: Browser einmal neu laden (Rejoin läuft über persistente `deviceId`).
+- `EADDRINUSE` on port `9000`: another process is using the port, or start with `SERVER_PORT=<port>`.
+- Other players cannot reach host: check host IP, allow `3000`/`9000` in firewall.
+- Blank screen after reconnect: refresh browser once (rejoin uses persistent `deviceId`).
 
-## Für Entwickler
+## For developers
 
-### Projektstruktur
+### Project structure
 
 ```text
 apps/
-  server/   # Socket.IO Events, Lobby- und Spiellogik
+  server/   # Socket.IO events, lobby and game logic
   web/      # Next.js UI + socket.io-client
 ```
 
-### Dev-Kommandos
+### Dev commands
 
-- Gesamtes Projekt: `npm run dev`
-- Nur Server: `npm run dev:server`
-- Nur Web: `npm run dev:web`
+- Whole project: `npm run dev`
+- Server only: `npm run dev:server`
+- Web only: `npm run dev:web`
 
-### Wichtige Dateien
+### Important files
 
-- `apps/server/src/socket/socketHandler.ts` – zentrale Event-Registrierung
-- `apps/server/src/lobby/lobbyManager.ts` – Lobby/Ready/Reconnect Verwaltung
-- `apps/server/src/game/gameLogic.ts` – Heist-Phasen, Chip-Aktionen, Showdown
-- `apps/server/src/game/gameManager.ts` – aktive Games pro Lobby
-- `apps/web/app/page.tsx` – Lobby-Flow im Frontend
-- `apps/web/app/components/Game.tsx` – Ingame-UI + CHIP-Aktionen
+- `apps/server/src/socket/socketHandler.ts` – central event registration
+- `apps/server/src/lobby/lobbyManager.ts` – lobby/ready/reconnect management
+- `apps/server/src/game/gameLogic.ts` – heist phases, chip actions, showdown
+- `apps/server/src/game/gameManager.ts` – active games per lobby
+- `apps/web/app/page.tsx` – lobby flow in frontend
+- `apps/web/app/components/Game.tsx` – in-game UI + chip actions
 
 ## Communication Protocol (Socket.IO)
 
-Die Kommunikation läuft zwischen `apps/web` (Client) und `apps/server` (Server).
+Communication runs between `apps/web` (client) and `apps/server` (server).
 
-**Richtungen**
+**Directions**
 
 - `c→s`: client to server
 - `s→c`: server to client
 
 ### Handshake / Reconnect
 
-Client setzt beim Connect:
+Client sets on connect:
 
 ```ts
 socket.auth = { deviceId: string };
 ```
 
-Wenn `deviceId` in einer Lobby bekannt ist, joined der Server automatisch die Lobby und sendet:
+If `deviceId` is known in a lobby, the server auto-joins that lobby and sends:
 
 - `LOBBY_JOINED`
 - `LOBBY_UPDATE`
-- optional `GAME_UPDATE` (falls Lobby schon `playing` ist)
+- optional `GAME_UPDATE` (if lobby is already `playing`)
 
-### Lobby-Events
+### Lobby Events
 
-| Event           | Richtung          | Payload                                                                                                               | Antwort / Folgeevents                       | Zweck                                          |
-| --------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------- |
-| `CREATE_LOBBY`  | c→s               | `{ playerName: string, playerId: string }`                                                                            | `LOBBY_CREATED`, `LOBBY_UPDATE`             | Neue Lobby erstellen und Host beitreten        |
-| `JOIN_LOBBY`    | c→s               | `{ joinCode: string, playerName: string, playerId: string }`                                                          | `LOBBY_JOINED`, `LOBBY_UPDATE` oder `ERROR` | Einer bestehenden Lobby beitreten              |
-| `LEAVE_LOBBY`   | c→s               | `{ joinCode: string, playerId: string }`                                                                              | `LOBBY_LEFT`, `LOBBY_UPDATE` oder `ERROR`   | Lobby verlassen                                |
-| `TOGGLE_READY`  | c→s               | `{ joinCode: string, playerId: string }`                                                                              | `LOBBY_UPDATE` oder `ERROR`                 | Ready-Status toggeln                           |
-| `START_GAME`    | c→s               | `{ joinCode: string }`                                                                                                | `GAME_STARTED`, `GAME_UPDATE`               | Spiel in Lobby starten                         |
-| `disconnect`    | c→s (automatisch) | –                                                                                                                     | –                                           | Socket-Disconnect markiert Spieler als offline |
-| `LOBBY_CREATED` | s→c               | `{ lobbyId: string, joinCode: string, playerId: string }`                                                             | –                                           | Bestätigung Create                             |
-| `LOBBY_JOINED`  | s→c               | `{ lobbyId: string, joinCode: string, playerId: string }`                                                             | –                                           | Bestätigung Join/Reconnect                     |
-| `LOBBY_LEFT`    | s→c               | `{ lobbyId: string, joinCode: string }`                                                                               | –                                           | Bestätigung Leave                              |
-| `LOBBY_UPDATE`  | s→c               | `{ players: Array<{ id: string; name: string; isHost: boolean; isReady: boolean }>, status: "waiting" \| "playing" }` | –                                           | Synchronisiert Lobbyzustand für alle           |
-| `ERROR`         | s→c               | `{ message: string }`                                                                                                 | –                                           | Fehlerfeedback                                 |
+| Event           | Direction         | Payload                                                                                                               | Response / follow-up events                 | Purpose                                      |
+| --------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | -------------------------------------------- |
+| `CREATE_LOBBY`  | c→s               | `{ playerName: string, playerId: string }`                                                                            | `LOBBY_CREATED`, `LOBBY_UPDATE`             | Create a new lobby and join as host          |
+| `JOIN_LOBBY`    | c→s               | `{ joinCode: string, playerName: string, playerId: string }`                                                          | `LOBBY_JOINED`, `LOBBY_UPDATE` or `ERROR`   | Join an existing lobby                       |
+| `LEAVE_LOBBY`   | c→s               | `{ joinCode: string, playerId: string }`                                                                              | `LOBBY_LEFT`, `LOBBY_UPDATE` or `ERROR`     | Leave a lobby                                |
+| `TOGGLE_READY`  | c→s               | `{ joinCode: string, playerId: string }`                                                                              | `LOBBY_UPDATE` or `ERROR`                   | Toggle ready status                          |
+| `START_GAME`    | c→s               | `{ joinCode: string }`                                                                                                | `GAME_STARTED`, `GAME_UPDATE`               | Start game in lobby                          |
+| `disconnect`    | c→s (automatic)   | –                                                                                                                     | –                                           | Socket disconnect marks player as offline    |
+| `LOBBY_CREATED` | s→c               | `{ lobbyId: string, joinCode: string, playerId: string }`                                                             | –                                           | Create confirmation                          |
+| `LOBBY_JOINED`  | s→c               | `{ lobbyId: string, joinCode: string, playerId: string }`                                                             | –                                           | Join/reconnect confirmation                  |
+| `LOBBY_LEFT`    | s→c               | `{ lobbyId: string, joinCode: string }`                                                                               | –                                           | Leave confirmation                           |
+| `LOBBY_UPDATE`  | s→c               | `{ players: Array<{ id: string; name: string; isHost: boolean; isReady: boolean }>, status: "waiting" \| "playing" }` | –                                           | Sync lobby state for all players             |
+| `ERROR`         | s→c               | `{ message: string }`                                                                                                 | –                                           | Error feedback                               |
 
-### Game-Events
+### Game Events
 
-| Event                | Richtung | Payload                                                            | Antwort / Folgeevents                                                      | Zweck                                                     |
-| -------------------- | -------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `REQUEST_GAME_STATE` | c→s      | `{ joinCode: string }`                                             | `GAME_UPDATE`                                                              | Aktuellen Spielzustand anfordern                          |
-| `CHIP_ACTION`        | c→s      | `{ joinCode: string, playerId: string, action: ChipAction }`       | `GAME_UPDATE`, optional `HEIST_RESULT`, optional `GAME_ENDED` oder `ERROR` | Chip-Interaktion in aktueller Phase                       |
-| `GAME_STARTED`       | s→c      | _(kein Payload)_                                                   | –                                                                          | Wechsel in Ingame-Ansicht                                 |
-| `GAME_UPDATE`        | s→c      | `{ publicState: PublicState, privateState: PrivateState \| null }` | –                                                                          | Synchronisiert öffentlichen + spielerspezifischen Zustand |
-| `HEIST_RESULT`       | s→c      | `HeistResult`                                                      | –                                                                          | Ergebnis eines abgeschlossenen Überfalls                  |
-| `GAME_ENDED`         | s→c      | `{ won: boolean, successes: number, failures: number } \| null`    | –                                                                          | Kampagne beendet                                          |
+| Event                | Direction | Payload                                                            | Response / follow-up events                                                      | Purpose                                                     |
+| -------------------- | --------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `REQUEST_GAME_STATE` | c→s       | `{ joinCode: string }`                                             | `GAME_UPDATE`                                                                   | Request current game state                                  |
+| `CHIP_ACTION`        | c→s       | `{ joinCode: string, playerId: string, action: ChipAction }`       | `GAME_UPDATE`, optional `HEIST_RESULT`, optional `GAME_ENDED` or `ERROR`       | Chip interaction in current phase                           |
+| `GAME_STARTED`       | s→c       | _(no payload)_                                                     | –                                                                               | Switch to in-game view                                      |
+| `GAME_UPDATE`        | s→c       | `{ publicState: PublicState, privateState: PrivateState \| null }` | –                                                                               | Sync public + player-specific state                         |
+| `HEIST_RESULT`       | s→c       | `HeistResult`                                                      | –                                                                               | Result of a completed heist                                 |
+| `GAME_ENDED`         | s→c       | `{ won: boolean, successes: number, failures: number } \| null`    | –                                                                               | Campaign finished                                           |
 
 `ChipAction`:
 
@@ -138,91 +138,87 @@ type ChipAction =
   | { type: "return_own" };
 ```
 
-### Chat-Events
+### Chat Events
 
-| Event          | Richtung | Payload                                                                                              | Antwort / Folgeevents      | Zweck                     |
-| -------------- | -------- | ---------------------------------------------------------------------------------------------------- | -------------------------- | ------------------------- |
-| `CHAT_MESSAGE` | c→s      | `{ joinCode?: string, lobbyId?: string, message: string, senderName?: string, playerName?: string }` | `CHAT_MESSAGE` (broadcast) | Chat-Nachricht an Lobby   |
-| `CHAT_MESSAGE` | s→c      | `{ id: string, text: string, sender: string }`                                                       | –                          | Empfangene Chat-Nachricht |
+| Event          | Direction | Payload                                                                                              | Response / follow-up events | Purpose                     |
+| -------------- | --------- | ---------------------------------------------------------------------------------------------------- | --------------------------- | --------------------------- |
+| `CHAT_MESSAGE` | c→s       | `{ joinCode?: string, lobbyId?: string, message: string, senderName?: string, playerName?: string }` | `CHAT_MESSAGE` (broadcast)  | Send chat message to lobby  |
+| `CHAT_MESSAGE` | s→c       | `{ id: string, text: string, sender: string }`                                                       | –                           | Receive chat message        |
 
-## Gameplay-Erweiterung: Challenges & Spezialisten
+## Gameplay Expansion: Challenges & Specialists
 
-### Grundidee
+### Core idea
 
-Ab dem **2. Überfall** ist immer genau **eine Zusatzkarte** aktiv und gilt nur für den nächsten Überfall:
+Starting with the **2nd heist**, exactly **one extra card** is active and applies only to the next heist:
 
-- Erfolgreicher Überfall → **Challenge-Karte** (erschwert)
-- Gescheiterter Überfall → **Spezialisten-Karte** (erleichtert)
+- Successful heist → **Challenge card** (makes it harder)
+- Failed heist → **Specialist card** (makes it easier)
 
-Danach wandert die Karte wieder unter den Stapel.
+After that, the card goes back under the deck.
 
-### Design-Ziel
+### Design goal
 
-Die Karten verändern gezielt einen Kernparameter:
+Cards intentionally modify one core parameter:
 
 - Information
-- Kartenverteilung
-- Kommunikation
-- Ranking-Regeln
-- Rundenstruktur
-- Siegbedingung
+- Card distribution
+- Communication
+- Ranking rules
+- Round structure
+- Win condition
 
 ## Roadmap
 
 ### UX / Visuals
 
-Status (Feb 2026):
+[X] **Skins for cards & table**
+   - Multiple deck looks (classic, noir, neon)
+   - Switchable table themes without gameplay changes
+[] **Improve animations**
+   - Card dealing, chip transfer, showdown reveal with better timing
+   - Option for reduced animations (accessibility)
+[] **UI/UX polish**
+   - Better mobile view for lobby + in-game
+   - Clearer phase status indicators
+[] **Sound**
+   - Music
+   - Sound effects
 
-- Lobby-Submenü für lokale Skins (Karten/Tisch) mit Persistenz im Browser
-- Cinematic Showdown-Reveal mit sequenziertem Timing
-- Ergebnis-Impact für Heist/Alarm (Badge, Icon-Animation, kurzer Screen-Flash)
+### Gameplay: Challenges (harder)
 
-1. **Skins für Karten & Tisch**
-   - Mehrere Deck-Looks (klassisch, noir, neon)
-   - Austauschbare Table-Themes ohne Gameplay-Änderung
-2. **Animationen verbessern**
-   - Karten-Deal, Chip-Transfer, Showdown-Reveal mit besserem Timing
-   - Option für reduzierte Animationen (Accessibility)
-3. **UI/UX Feinschliff**
-   - Bessere Mobile-Ansicht für Lobby + Ingame
-   - Klarere Status-Indikatoren je Phase
-4. **Sound**
+1. **Fast Entry** – Pre-flop chip phase is skipped, start directly at flop
+2. **Noise Sensors** – 1-star chips (rounds 1–3) cannot be passed on after being taken
+3. **Motion Detectors** – Flop with J/Q/K: player with 1-star chip from round 1 draws a new hand
+4. **Retina Scan** – Guess rank value of highest red chip before showdown, otherwise auto-loss
+5. **Hasty Escape** – Orange round is skipped, after round 2 go directly to turn+river
+6. **Vent Shaft** – Highest chips from rounds 1–3 become fixed once taken
+7. **Laser Barriers** – Flop without J/Q/K: highest chip from round 1 draws a new hand
+8. **Blackout** – Chips from previous round are removed at the start of each round
+9. **Fingerprint Scan** – Guess hand type of highest red chip, otherwise auto-loss
+10. **Surveillance Cameras** – 3 hole cards instead of 2, best hand from 3+5
 
-### Gameplay: Challenges (erschweren)
+### Gameplay: Specialists (helpful)
 
-1. **Schnelleinstieg** – Pre-Flop-Chipphase entfällt, direkt Flop
-2. **Geräuschsensoren** – 1-Stern-Chips (Runden 1–3) nach Aufnahme nicht weitergebbar
-3. **Bewegungsmelder** – Flop mit J/Q/K: Spieler mit 1-Stern-Chip aus Runde 1 zieht neue Hand
-4. **Netzhautscan** – Vor Showdown Rangwert des höchsten roten Chips raten, sonst Auto-Loss
-5. **Überhastete Flucht** – Orange-Runde entfällt, nach Runde 2 direkt Turn+River
-6. **Lüftungsschacht** – Höchste Chips aus Runden 1–3 werden nach Aufnahme fixiert
-7. **Lichtschranken** – Flop ohne J/Q/K: höchster Chip aus Runde 1 zieht neue Hand
-8. **Blackout** – Chips der vorherigen Runde werden zu Rundenbeginn entfernt
-9. **Fingerabdruckscan** – Pokerhand-Typ des höchsten roten Chips raten, sonst Auto-Loss
-10. **Überwachungskameras** – 3 Hole Cards statt 2, beste Hand aus 3+5
+1. **Informant** – One hole card is deliberately revealed
+2. **Driver** – One player states their hand rank (e.g. “Pair”)
+3. **Backer** – Everyone states number of royal cards (J/Q/K)
+4. **Mastermind** – Group chooses a rank, one player states count of that rank
+5. **Hacker** – Draw one card, discard one card
+6. **Coordinator** – Everyone passes one hole card to the left
+7. **Jack** – Special card as `J` without suit (cannot contribute to flush)
+8. **Number Genius** – Everyone states sum of card values (2–10, J/Q/K=10, A=11)
+9. **Con Artist** – Shuffle all hole cards and redeal
+10. **Bruiser** – Tiebreak advantage against equally ranked hands
 
-### Gameplay: Spezialisten (helfen)
+### Suggested technical implementation in phases
 
-1. **Informant** – Eine Handkarte wird gezielt gezeigt
-2. **Fahrerin** – Ein Spieler nennt seinen Handrang (z.B. „Paar“)
-3. **Geldgeber** – Alle nennen Anzahl royaler Karten (J/Q/K)
-4. **Mastermind** – Gruppe wählt Rang, ein Spieler nennt Anzahl davon
-5. **Hackerin** – Eine Karte ziehen, eine abwerfen
-6. **Koordinator** – Alle geben eine Handkarte nach links
-7. **Jack** – Spezialkarte als `J` ohne Farbe (nicht flush-fähig)
-8. **Zahlengenie** – Alle nennen Summe ihrer Kartenwerte (2–10, J/Q/K=10, A=11)
-9. **Trickbetrügerin** – Alle Hole Cards mischen und neu verteilen
-10. **Muskelprotz** – Tiebreak-Vorteil gegen gleichrangige Hände
-
-### Vorschlag für technische Umsetzung in Phasen
-
-1. **Rule Engine einführen**
-   - `modifier`-Interface pro Karte (`onHeistStart`, `onRoundStart`, `beforeShowdown`, `afterChipAction`)
-2. **State erweitern**
+1. **Introduce Rule Engine**
+   - `modifier` interface per card (`onHeistStart`, `onRoundStart`, `beforeShowdown`, `afterChipAction`)
+2. **Extend state**
    - Active modifier, source (`challenge`/`specialist`), remaining duration (=1 heist)
-3. **Server-Protokoll ergänzen**
-   - `MODIFIER_REVEALED`, Modifier-Feld in `GAME_UPDATE`
-4. **UI integrieren**
-   - Sichtbare Karte + Kurztext im HUD
-5. **Balancing + Telemetrie lokal**
-   - Erfolgsquote je Modifier, häufige Failure-Ursachen, Tuning
+3. **Extend server protocol**
+   - `MODIFIER_REVEALED`, modifier field in `GAME_UPDATE`
+4. **Integrate UI**
+   - Visible card + short text in HUD
+5. **Local balancing + telemetry**
+   - Success rate per modifier, common failure causes, tuning
