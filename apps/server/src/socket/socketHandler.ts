@@ -7,8 +7,21 @@ export function setupSocketHandlers(io: Server) {
   io.on("connection", (socket: Socket) => {
     console.log(" Connected:", socket.id);
 
-    socket.on("CREATE_LOBBY", ({ playerName }) => {
-      const result = lobbyManager.createLobby(playerName, socket.id);
+    // Auto-reconnect if deviceId is provided
+    const deviceId = socket.handshake.auth.deviceId;
+    if (deviceId) {
+      const lobby = lobbyManager.findLobbyByPlayerId(deviceId);
+      if (lobby) {
+        console.log(`Auto-reconnecting player ${deviceId} to lobby ${lobby.joinCode}`);
+        lobbyManager.reconnectPlayerByCode(lobby.joinCode, deviceId, socket.id);
+        socket.join(lobby.joinCode);
+        socket.emit("LOBBY_JOINED", { lobbyId: lobby.id, joinCode: lobby.joinCode, playerId: deviceId });
+        emitLobbyUpdate(io, lobby.joinCode);
+      }
+    }
+
+    socket.on("CREATE_LOBBY", ({ playerName, playerId }) => {
+      const result = lobbyManager.createLobby(playerName, socket.id, playerId);
 
       socket.join(result.joinCode);
 
@@ -16,8 +29,8 @@ export function setupSocketHandlers(io: Server) {
       emitLobbyUpdate(io, result.joinCode);
     });
 
-    socket.on("JOIN_LOBBY", ({ joinCode, playerName }) => {
-      const result = lobbyManager.joinLobby(joinCode, playerName, socket.id);
+    socket.on("JOIN_LOBBY", ({ joinCode, playerName, playerId }) => {
+      const result = lobbyManager.joinLobby(joinCode, playerName, socket.id, playerId);
 
       if (!result) {
         socket.emit("ERROR", { message: "Lobby not found" });
@@ -56,7 +69,7 @@ export function setupSocketHandlers(io: Server) {
       io.to(joinCode).emit("GAME_STARTED");
     });
 
-    socket.on("TOGGLE_READY", ({joinCode, playerId}) => {
+    socket.on("TOGGLE_READY", ({ joinCode, playerId }) => {
       const success = lobbyManager.setPlayerReady(
         joinCode,
         playerId,

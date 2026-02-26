@@ -25,10 +25,24 @@ export default function RootPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    // 1. Persistent Player Name
     const storedName = localStorage.getItem("playerName");
     if (storedName) {
       setName(storedName);
     }
+
+    // 2. Persistent Device ID (Session Recovery)
+    let savedId = localStorage.getItem("the-gang-device-id");
+    if (!savedId) {
+      savedId = crypto.randomUUID();
+      localStorage.setItem("the-gang-device-id", savedId);
+    }
+    setPlayerId(savedId);
+
+    // 3. Connect with Auth
+    socket.auth = { deviceId: savedId };
+    socket.connect();
+
     setupSocketHandlers(
       setPlayers,
       setActiveJoinCode,
@@ -60,7 +74,7 @@ export default function RootPage() {
 
   const handleCreateLobby = () => {
     console.log("Create Lobby clicked");
-    socket.emit("CREATE_LOBBY", { playerName });
+    socket.emit("CREATE_LOBBY", { playerName, playerId });
   };
 
   const handleJoinSubmit = (e: React.FormEvent) => {
@@ -68,7 +82,7 @@ export default function RootPage() {
     const trimmedJoinCode = joinCode.trim();
     if (trimmedJoinCode) {
       console.log("Joining Lobby:", trimmedJoinCode);
-      socket.emit("JOIN_LOBBY", { joinCode: trimmedJoinCode, playerName });
+      socket.emit("JOIN_LOBBY", { joinCode: trimmedJoinCode, playerName, playerId });
       setCurrentView("WAITING_ROOM");
     }
   };
@@ -282,8 +296,8 @@ export default function RootPage() {
                 </span>
                 <span
                   className={`text-xs uppercase font-bold tracking-wider px-2 py-1 rounded ${player.isReady
-                      ? "text-green-500 bg-green-500/10 border border-green-500/20"
-                      : "text-yellow-500 bg-yellow-500/10 border border-yellow-500/20"
+                    ? "text-green-500 bg-green-500/10 border border-green-500/20"
+                    : "text-yellow-500 bg-yellow-500/10 border border-yellow-500/20"
                     }`}
                 >
                   {player.isReady ? "Ready" : "Waiting"}
@@ -309,8 +323,8 @@ export default function RootPage() {
           <button
             onClick={handleToggleReady}
             className={`w-full py-4 px-4 font-bold rounded-lg transition-colors uppercase tracking-widest ${isCurrentUserReady
-                ? "bg-green-600 hover:bg-green-500 text-white"
-                : "bg-white hover:bg-neutral-200 text-black"
+              ? "bg-green-600 hover:bg-green-500 text-white"
+              : "bg-white hover:bg-neutral-200 text-black"
               }`}
           >
             {isCurrentUserReady ? "Not Ready" : "Ready"}

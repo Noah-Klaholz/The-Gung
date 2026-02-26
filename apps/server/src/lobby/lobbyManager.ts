@@ -30,9 +30,8 @@ export class LobbyManager {
   private lobbiesById = new Map<string, Lobby>();
   private lobbiesByCode = new Map<string, Lobby>();
 
-  createLobby(hostName: string, socketId: string) {
+  createLobby(hostName: string, socketId: string, playerId: string) {
     const lobbyId = uuid();
-    const playerId = uuid();
 
     // Ensure unique join code
     let joinCode: string;
@@ -61,11 +60,9 @@ export class LobbyManager {
     return { lobbyId, joinCode, playerId };
   }
 
-  joinLobby(joinCode: string, playerName: string, socketId: string) {
+  joinLobby(joinCode: string, playerName: string, socketId: string, playerId: string) {
     const lobby = this.lobbiesByCode.get(joinCode);
     if (!lobby) return null;
-
-    const playerId = uuid();
 
     lobby.players.set(playerId, {
       id: playerId,
@@ -75,6 +72,15 @@ export class LobbyManager {
     });
 
     return { lobbyId: lobby.id, joinCode, playerId };
+  }
+
+  findLobbyByPlayerId(playerId: string) {
+    for (const lobby of this.lobbiesById.values()) {
+      if (lobby.players.has(playerId)) {
+        return lobby;
+      }
+    }
+    return null;
   }
 
   // Don't think this works yet
