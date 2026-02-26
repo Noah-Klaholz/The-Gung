@@ -6,16 +6,16 @@ import { act } from "react";
 
 interface ActiveGame {
   lobbyCode: string;
-  game: any; // specific game instance
+  game: gameLogic; // specific game instance
 }
 
 export class GameManager {
-  private activeGames = new Map<string, gameLogic>();
+  private activeGames = new Map<string, ActiveGame>();
 
   startGame(lobby: Lobby) {
-    const gameId = uuid();
     const playerArr = Array.from(lobby.players.values());
-    this.activeGames.set(gameId, new gameLogic(playerArr));
+    const game = new gameLogic(playerArr);
+    this.activeGames.set( lobby.joinCode, { lobbyCode: lobby.joinCode, game });
   }
 
   getGame(lobbyCode: string) {

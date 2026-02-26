@@ -107,3 +107,13 @@ function emitLobbyUpdate(io: Server, joinCode: string) {
     status: lobby.status,
   });
 }
+
+function emitGameUpdate(io: Server, joinCode: string) {
+  const lobby = lobbyManager.getLobbyByCode(joinCode);
+  if (!lobby) return;
+
+  const game = gameManager.getGame(joinCode);
+  if (!game) return
+
+  io.to(joinCode).emit("GAME_UPDATE", { /*game*/ }); // TODO actual gamestate here
+}
