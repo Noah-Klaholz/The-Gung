@@ -1,6 +1,6 @@
 import { v4 as uuid } from "uuid";
 
-export interface Player {
+export interface LobbyPlayer {
   id: string;
   name: string;
   socketId?: string;
@@ -10,7 +10,7 @@ export interface Player {
 export interface Lobby {
   id: string;
   joinCode: string;
-  players: Map<string, Player>;
+  players: Map<string, LobbyPlayer>;
   hostId: string;
   status: "waiting" | "playing";
 }
@@ -40,7 +40,7 @@ export class LobbyManager {
       joinCode = generateJoinCode();
     } while (this.lobbiesByCode.has(joinCode));
 
-    const host: Player = {
+    const host: LobbyPlayer = {
       id: playerId,
       name: hostName,
       socketId,

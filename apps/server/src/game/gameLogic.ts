@@ -1,8 +1,9 @@
 import * as dm from "./DeckManager";
 import * as pe from "./PokerEvaluator";
 import { Card } from "./utils/Card";
+import { LobbyPlayer } from "../lobby/lobbyManager"
 
-export interface Player {
+export interface GamePlayer {
   id: string;
   name: string;
   hand: Card[];
@@ -20,28 +21,33 @@ export type GamePhase =
   | "Finished";
 
 export class gameLogic {
-  players: Player[];
+  players: GamePlayer[];
   deck: Card[];
   communityCards: Card[];
   roundChips: number[];
   phase: GamePhase;
 
-  constructor(players: Player[]) {
-    this.players = players.map((p) => ({
-      ...p,
-      hand: [],
-      trueRank: 1,
-      chips: [],
-    }));
-    this.deck = dm.createDeck();
-    dm.shuffleDeck(this.deck);
-    this.communityCards = [];
-    this.roundChips = Array.from(
-      { length: this.players.length },
-      (_, i) => i + 1,
-    );
-    this.phase = "init";
-  }
+constructor(lobbyPlayers: LobbyPlayer[]) {
+  this.players = lobbyPlayers.map((p) => ({
+    id: p.id,
+    name: p.name,
+    hand: [],
+    trueRank: 1,
+    chips: [],
+  }));
+
+  this.deck = dm.createDeck();
+  dm.shuffleDeck(this.deck);
+
+  this.communityCards = [];
+
+  this.roundChips = Array.from(
+    { length: this.players.length },
+    (_, i) => i + 1
+  );
+
+  this.phase = "init";
+}
 
   startGame() {
     for (const player of this.players) {

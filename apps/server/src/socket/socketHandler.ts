@@ -1,7 +1,9 @@
 import { Server, Socket } from "socket.io";
 import { LobbyManager } from "../lobby/lobbyManager.ts";
+import { GameManager } from "../game/gameManager.ts";
 
 const lobbyManager = new LobbyManager();
+const gameManager = new GameManager();
 
 export function setupSocketHandlers(io: Server) {
   io.on("connection", (socket: Socket) => {
@@ -63,7 +65,7 @@ export function setupSocketHandlers(io: Server) {
 
       lobby.status = "playing";
 
-      //TODO: Start game here
+      gameManager.startGame(lobby);
 
       console.log("Starting game")
 
