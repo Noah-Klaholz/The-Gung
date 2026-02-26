@@ -5,6 +5,16 @@ import { socket } from "../lib/socket";
 import { usePlayer, Player } from "../lib/context/playerContext";
 import Game from "./components/Game";
 import ChatBox from "./components/ChatBox";
+import {
+  CARD_SKINS,
+  DEFAULT_CARD_SKIN,
+  DEFAULT_TABLE_SKIN,
+  isCardSkin,
+  isTableSkin,
+  TABLE_SKINS,
+  type CardSkin,
+  type TableSkin,
+} from "../lib/skins";
 
 export default function RootPage() {
   const { playerName, setPlayerName, playerId, setPlayerId, setPlayers, players } = usePlayer();
@@ -21,11 +31,23 @@ export default function RootPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [joinInput, setJoinInput] = useState(""); // only for the join form input
   const [isLobbyChatOpen, setIsLobbyChatOpen] = useState(false);
+  const [cardSkin, setCardSkin] = useState<CardSkin>(DEFAULT_CARD_SKIN);
+  const [tableSkin, setTableSkin] = useState<TableSkin>(DEFAULT_TABLE_SKIN);
 
   useEffect(() => {
     // Load stored player name
     const storedName = localStorage.getItem("playerName");
     if (storedName) setName(storedName);
+
+    const storedCardSkin = localStorage.getItem("the-gung-card-skin");
+    if (storedCardSkin && isCardSkin(storedCardSkin)) {
+      setCardSkin(storedCardSkin);
+    }
+
+    const storedTableSkin = localStorage.getItem("the-gung-table-skin");
+    if (storedTableSkin && isTableSkin(storedTableSkin)) {
+      setTableSkin(storedTableSkin);
+    }
 
     // Persistent device ID
     let savedId = localStorage.getItem("the-gang-device-id");
@@ -58,6 +80,14 @@ export default function RootPage() {
       socket.off("GAME_STARTED");
     };
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("the-gung-card-skin", cardSkin);
+  }, [cardSkin]);
+
+  useEffect(() => {
+    localStorage.setItem("the-gung-table-skin", tableSkin);
+  }, [tableSkin]);
 
   // --- Handlers ---
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -112,6 +142,8 @@ export default function RootPage() {
   const isCurrentUserReady = currentPlayer?.isReady ?? false;
   const isCurrentUserHost = currentPlayer?.isHost ?? false;
   const allPlayersReady = players.length > 0 && players.every((p) => p.isReady);
+  const activeTableSkin = TABLE_SKINS[tableSkin];
+  const activeCardSkin = CARD_SKINS[cardSkin];
 
   // --- Views ---
   const renderLoginView = () => (
@@ -280,6 +312,73 @@ export default function RootPage() {
             >
               Leave Lobby
             </button>
+
+            <div className="rounded-lg border border-neutral-800 bg-black/60 p-4 space-y-3">
+              <h3 className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest">Visuals</h3>
+              <div>
+                <label htmlFor="tableSkin" className="block text-[10px] text-neutral-500 uppercase tracking-widest mb-1 font-bold">
+                  Table Skin
+                </label>
+                <select
+                  id="tableSkin"
+                  value={tableSkin}
+                  onChange={(event) => {
+                    const nextSkin = event.target.value;
+                    if (isTableSkin(nextSkin)) setTableSkin(nextSkin);
+                  }}
+                  className="w-full bg-neutral-900 border border-neutral-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-white"
+                >
+                  {(Object.keys(TABLE_SKINS) as TableSkin[]).map((skinKey) => (
+                    <option key={skinKey} value={skinKey}>{TABLE_SKINS[skinKey].label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="cardSkin" className="block text-[10px] text-neutral-500 uppercase tracking-widest mb-1 font-bold">
+                  Card Skin
+                </label>
+                <select
+                  id="cardSkin"
+                  value={cardSkin}
+                  onChange={(event) => {
+                    const nextSkin = event.target.value;
+                    if (isCardSkin(nextSkin)) setCardSkin(nextSkin);
+                  }}
+                  className="w-full bg-neutral-900 border border-neutral-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-white"
+                >
+                  {(Object.keys(CARD_SKINS) as CardSkin[]).map((skinKey) => (
+                    <option key={skinKey} value={skinKey}>{CARD_SKINS[skinKey].label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="rounded-lg border border-neutral-700 bg-neutral-900/80 p-3 space-y-2">
+                <div className="text-[10px] text-neutral-500 uppercase tracking-widest font-bold">Live Preview</div>
+                <div className={`h-12 rounded-md border border-neutral-700 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-from)_0%,_var(--tw-gradient-via)_45%,_black_100%)] ${activeTableSkin.backgroundGradientClass} relative overflow-hidden`}>
+                  <div className={`absolute inset-0 ${activeTableSkin.auraClass}`} />
+                  <div className="absolute top-1 right-2 text-[9px] font-bold text-neutral-300 tracking-widest">
+                    {activeTableSkin.label}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className={`w-14 h-20 rounded-md ${activeCardSkin.surfaceClass} shadow-lg border border-black/10 p-1.5 flex flex-col justify-between ${activeCardSkin.textClass}`}>
+                    <div className={`${activeCardSkin.suitRedClass} text-xs font-black leading-none`}>
+                      A
+                      <span className="block text-[10px]">♥</span>
+                    </div>
+                    <div className={`self-end rotate-180 ${activeCardSkin.suitRedClass} text-xs font-black leading-none`}>
+                      A
+                      <span className="block text-[10px]">♥</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[11px] text-white font-semibold">{activeCardSkin.label}</div>
+                    <div className="text-[10px] text-neutral-500 uppercase tracking-widest">Card Skin</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -309,6 +408,8 @@ export default function RootPage() {
           playerId={playerId}
           joinCode={activeJoinCode}
           onLeave={handleLeaveLobby}
+          cardSkin={cardSkin}
+          tableSkin={tableSkin}
         />
       )}
     </div>

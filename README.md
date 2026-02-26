@@ -171,6 +171,12 @@ Die Karten verändern gezielt einen Kernparameter:
 
 ### UX / Visuals
 
+Status (Feb 2026):
+
+- Lobby-Submenü für lokale Skins (Karten/Tisch) mit Persistenz im Browser
+- Cinematic Showdown-Reveal mit sequenziertem Timing
+- Ergebnis-Impact für Heist/Alarm (Badge, Icon-Animation, kurzer Screen-Flash)
+
 1. **Skins für Karten & Tisch**
    - Mehrere Deck-Looks (klassisch, noir, neon)
    - Austauschbare Table-Themes ohne Gameplay-Änderung
@@ -180,6 +186,7 @@ Die Karten verändern gezielt einen Kernparameter:
 3. **UI/UX Feinschliff**
    - Bessere Mobile-Ansicht für Lobby + Ingame
    - Klarere Status-Indikatoren je Phase
+4. **Sound**
 
 ### Gameplay: Challenges (erschweren)
 

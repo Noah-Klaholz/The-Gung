@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import ChatBox from "./ChatBox";
 import { socket } from "../../lib/socket";
+import { CARD_SKINS, TABLE_SKINS, type CardSkin, type TableSkin } from "../../lib/skins";
 
 interface Card {
     rank: string;
@@ -44,6 +45,8 @@ interface GameProps {
     playerId: string;
     joinCode: string;
     onLeave: () => void;
+    cardSkin: CardSkin;
+    tableSkin: TableSkin;
 }
 
 // Convert backend card format (suit: "h"/"d"/"c"/"s", rank: "T") to frontend format
@@ -55,7 +58,7 @@ function convertCard(card: any): Card | null {
     return { rank, suit };
 }
 
-export default function Game({ playerId, joinCode, onLeave }: GameProps) {
+export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin }: GameProps) {
     // Server-driven state
     const [phase, setPhase] = useState("PRE-FLOP");
     const [communityCards, setCommunityCards] = useState<(Card | null)[]>([null, null, null, null, null]);
@@ -71,6 +74,9 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
     const [showShowdown, setShowShowdown] = useState(false);
     const [heistResult, setHeistResult] = useState<HeistResult | null>(null);
     const [revealedCount, setRevealedCount] = useState(0);
+    const [revealPhase, setRevealPhase] = useState<"idle" | "intro" | "revealing" | "impact">("idle");
+    const [resultBurst, setResultBurst] = useState<"success" | "alarm" | null>(null);
+    const [showImpactFlash, setShowImpactFlash] = useState(false);
 
     // Game over state
     const [gameOver, setGameOver] = useState<{ won: boolean; successes: number; failures: number } | null>(null);
@@ -131,16 +137,54 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
 
     // Sequential reveal animation for showdown
     useEffect(() => {
-        if (!showShowdown || !heistResult) { setRevealedCount(0); return; }
+        if (!showShowdown || !heistResult) {
+            setRevealedCount(0);
+            setRevealPhase("idle");
+            setResultBurst(null);
+            setShowImpactFlash(false);
+            return;
+        }
+
         setRevealedCount(0);
-        let i = 0;
-        const total = heistResult.orderedShowdown.length;
-        const interval = setInterval(() => {
-            i++;
-            setRevealedCount(i);
-            if (i >= total) clearInterval(interval);
-        }, 900);
-        return () => clearInterval(interval);
+        setRevealPhase("intro");
+        setResultBurst(null);
+        setShowImpactFlash(false);
+
+        const timers: Array<ReturnType<typeof setTimeout>> = [];
+        let revealInterval: ReturnType<typeof setInterval> | null = null;
+
+        const introTimer = setTimeout(() => {
+            setRevealPhase("revealing");
+            let i = 0;
+            const total = heistResult.orderedShowdown.length;
+
+            revealInterval = setInterval(() => {
+                i += 1;
+                setRevealedCount(i);
+
+                if (i >= total) {
+                    if (revealInterval) clearInterval(revealInterval);
+
+                    const impactTimer = setTimeout(() => {
+                        setRevealPhase("impact");
+                        setResultBurst(heistResult.success ? "success" : "alarm");
+                        setShowImpactFlash(true);
+
+                        const flashTimer = setTimeout(() => setShowImpactFlash(false), 750);
+                        timers.push(flashTimer);
+                    }, 500);
+
+                    timers.push(impactTimer);
+                }
+            }, 650);
+        }, 500);
+
+        timers.push(introTimer);
+
+        return () => {
+            timers.forEach((timer) => clearTimeout(timer));
+            if (revealInterval) clearInterval(revealInterval);
+        };
     }, [showShowdown, heistResult]);
 
     // Chip actions
@@ -196,6 +240,14 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
     };
     const currentChipColor = phaseColorMap[phase] ?? "bg-zinc-700 text-zinc-300";
 
+    const activeTableSkin = TABLE_SKINS[tableSkin];
+    const activeCardSkin = CARD_SKINS[cardSkin];
+
+    const getSuitColorClass = (suit: string) => {
+        const isRedSuit = suit === "hearts" || suit === "diamonds";
+        return isRedSuit ? activeCardSkin.suitRedClass : activeCardSkin.suitBlackClass;
+    };
+
     const getSuitSymbol = (suit: string) => {
         switch (suit) {
             case 'hearts': return '♥';
@@ -222,7 +274,7 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
 
     const renderCardPattern = (card: Card) => {
         const symbol = getSuitSymbol(card.suit);
-        const color = card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900';
+        const color = getSuitColorClass(card.suit);
 
         if (['A', 'J', 'Q', 'K', '10'].includes(card.rank)) {
             return (
@@ -250,7 +302,7 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
 
     return (
         <div className="min-h-screen bg-black text-white flex items-center justify-center p-4 overflow-hidden relative">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-from)_0%,_var(--tw-gradient-via)_40%,_black_100%)] from-zinc-800 via-zinc-950 opacity-100 z-0" />
+            <div className={`absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-from)_0%,_var(--tw-gradient-via)_40%,_black_100%)] ${activeTableSkin.backgroundGradientClass} opacity-100 z-0`} />
 
             <div className="relative z-10 w-full max-w-[1450px] h-[95vh] flex flex-col gap-4">
 
@@ -364,20 +416,20 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                             {/* Center: The Heist */}
                             <div className="flex-1 relative flex flex-col">
 
-                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(20,83,45,0.2)_0%,_transparent_70%)] pointer-events-none" />
+                                <div className={`absolute inset-0 ${activeTableSkin.auraClass} pointer-events-none`} />
 
                                 {/* Community Cards */}
                                 <div className="flex-1 flex items-center justify-center gap-1">
                                     {communityCards.map((card, idx) => (
-                                        <div key={idx} className={`w-28 h-40 rounded-xl transition-all duration-700 ${card ? 'bg-white shadow-[0_15px_30px_rgba(0,0,0,0.5)]' : 'bg-zinc-800 border-2 border-dashed border-zinc-700 scale-95'}`}>
+                                        <div key={idx} className={`w-28 h-40 rounded-xl transition-all duration-700 ${card ? `${activeCardSkin.surfaceClass} shadow-[0_15px_30px_rgba(0,0,0,0.5)]` : activeCardSkin.placeholderClass}`}>
                                             {card && (
-                                                <div className="p-2 h-full flex flex-col justify-between text-black font-black italic relative overflow-hidden">
-                                                    <div className={`text-xl leading-none ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
+                                                <div className={`p-2 h-full flex flex-col justify-between ${activeCardSkin.textClass} font-black italic relative overflow-hidden`}>
+                                                    <div className={`text-xl leading-none ${getSuitColorClass(card.suit)}`}>
                                                         {card.rank}<br />
                                                         <span className="text-base">{getSuitSymbol(card.suit)}</span>
                                                     </div>
                                                     {renderCardPattern(card)}
-                                                    <div className={`text-xl leading-none self-end rotate-180 ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
+                                                    <div className={`text-xl leading-none self-end rotate-180 ${getSuitColorClass(card.suit)}`}>
                                                         {card.rank}<br />
                                                         <span className="text-base">{getSuitSymbol(card.suit)}</span>
                                                     </div>
@@ -451,14 +503,14 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                     {/* Hand Cards */}
                                     <div className="flex justify-center gap-2 -mb-20">
                                         {myCards.map((card, idx) => (
-                                            <div key={idx} className="w-24 h-36 bg-white rounded-lg shadow-2xl transition-all hover:-translate-y-8 cursor-pointer relative overflow-hidden group">
-                                                <div className="p-2 h-full flex flex-col justify-between text-black font-black italic">
-                                                    <div className={`text-base leading-none ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
+                                            <div key={idx} className={`w-24 h-36 ${activeCardSkin.surfaceClass} rounded-lg shadow-2xl transition-all hover:-translate-y-8 cursor-pointer relative overflow-hidden group`}>
+                                                <div className={`p-2 h-full flex flex-col justify-between ${activeCardSkin.textClass} font-black italic`}>
+                                                    <div className={`text-base leading-none ${getSuitColorClass(card.suit)}`}>
                                                         {card.rank}<br />
                                                         <span className="text-xs">{getSuitSymbol(card.suit)}</span>
                                                     </div>
                                                     {renderCardPattern(card)}
-                                                    <div className={`text-base leading-none self-end rotate-180 ${card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-zinc-900'}`}>
+                                                    <div className={`text-base leading-none self-end rotate-180 ${getSuitColorClass(card.suit)}`}>
                                                         {card.rank}<br />
                                                         <span className="text-xs">{getSuitSymbol(card.suit)}</span>
                                                     </div>
@@ -482,20 +534,26 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
             {showShowdown && heistResult && (
                 <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col p-6 gap-6 overflow-hidden">
 
+                    {showImpactFlash && (
+                        <div className={`absolute inset-0 pointer-events-none ${heistResult.success ? "reveal-flash-success" : "reveal-flash-alarm"}`} />
+                    )}
+
                     <header className="flex items-center justify-between shrink-0">
                         <div>
                             <h2 className="text-4xl font-black italic bg-gradient-to-r from-yellow-300 to-yellow-600 bg-clip-text text-transparent tracking-tighter">
-                                HEIST #{heistResult.heistNumber} — {heistResult.success ? "VAULT CRACKED! ✅" : "ALARM TRIGGERED! ❌"}
+                                HEIST #{heistResult.heistNumber} — {revealPhase === "impact" ? (heistResult.success ? "VAULT CRACKED" : "ALARM TRIGGERED") : "ACCESSING LOCK MECHANISM..."}
                             </h2>
                             <p className="text-sm text-zinc-400 mt-1">
                                 Vaults: {heistResult.successes}/3 · Alarms: {heistResult.failures}/3
                             </p>
+                            {revealPhase === "impact" }
                         </div>
                         <button
                             onClick={() => setShowShowdown(false)}
-                            className="px-8 py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase tracking-widest text-xs rounded-xl shadow-[0_0_30px_rgba(234,179,8,0.3)] transition-all"
+                            disabled={revealPhase !== "impact"}
+                            className="px-8 py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase tracking-widest text-xs rounded-xl shadow-[0_0_30px_rgba(234,179,8,0.3)] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                            Continue
+                            {revealPhase === "impact" ? "Continue" : "Revealing..."}
                         </button>
                     </header>
 
@@ -506,10 +564,10 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                             return (
                                 <div key={p.playerId} className="relative" style={{ perspective: '800px' }}>
                                     <div
-                                        className="w-full h-full transition-transform duration-700"
+                                        className="w-full h-full transition-transform duration-700 ease-out"
                                         style={{
                                             transformStyle: 'preserve-3d',
-                                            transform: revealed ? 'rotateY(0deg)' : 'rotateY(90deg)',
+                                            transform: revealed ? 'rotateY(0deg) translateY(0px)' : 'rotateY(90deg) translateY(18px)',
                                         }}
                                     >
                                         <div className={`w-full h-full rounded-2xl border flex flex-col p-4 gap-3 shadow-2xl ${isLast && revealed ? 'bg-yellow-950/60 border-yellow-500/60 shadow-yellow-500/20' : 'bg-zinc-900/70 border-zinc-800'}`}>
@@ -540,7 +598,7 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                                     </div>
 
                                     {!revealed && (
-                                        <div className="absolute inset-0 rounded-2xl bg-zinc-900 border border-zinc-700 flex items-center justify-center">
+                                        <div className={`absolute inset-0 rounded-2xl ${activeCardSkin.backClass} flex items-center justify-center ${revealPhase === "intro" ? "animate-pulse" : ""}`}>
                                             <span className="text-5xl opacity-20">🂠</span>
                                         </div>
                                     )}
@@ -556,7 +614,7 @@ export default function Game({ playerId, joinCode, onLeave }: GameProps) {
                 <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center">
                     <div className="text-center space-y-6">
                         <h2 className={`text-6xl font-black italic ${gameOver.won ? 'text-green-400' : 'text-red-500'}`}>
-                            {gameOver.won ? "🎉 HEIST COMPLETE!" : "🚨 BUSTED!"}
+                            {gameOver.won ? "HEIST COMPLETE!" : "BUSTED!"}
                         </h2>
                         <p className="text-xl text-zinc-400">
                             Vaults: {gameOver.successes}/3 · Alarms: {gameOver.failures}/3

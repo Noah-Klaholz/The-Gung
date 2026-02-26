@@ -1,1 +1,93 @@
 @import "tailwindcss";
+
+@keyframes revealFlashSuccess {
+	0% {
+		opacity: 0;
+	}
+	18% {
+		opacity: 0.55;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+@keyframes revealFlashAlarm {
+	0% {
+		opacity: 0;
+	}
+	15% {
+		opacity: 0.65;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+@keyframes badgeImpact {
+	0% {
+		transform: scale(0.86);
+		opacity: 0;
+	}
+	60% {
+		transform: scale(1.04);
+		opacity: 1;
+	}
+	100% {
+		transform: scale(1);
+		opacity: 1;
+	}
+}
+
+@keyframes iconPopSuccess {
+	0% {
+		transform: scale(0.8) translateY(2px);
+	}
+	60% {
+		transform: scale(1.25) translateY(-2px);
+	}
+	100% {
+		transform: scale(1);
+	}
+}
+
+@keyframes iconPopAlarm {
+	0% {
+		transform: translateX(0);
+	}
+	25% {
+		transform: translateX(-3px);
+	}
+	50% {
+		transform: translateX(3px);
+	}
+	75% {
+		transform: translateX(-2px);
+	}
+	100% {
+		transform: translateX(0);
+	}
+}
+
+.reveal-flash-success {
+	background: radial-gradient(circle at center, rgba(34, 197, 94, 0.4) 0%, transparent 65%);
+	animation: revealFlashSuccess 750ms ease-out forwards;
+}
+
+.reveal-flash-alarm {
+	background: radial-gradient(circle at center, rgba(239, 68, 68, 0.45) 0%, transparent 65%);
+	animation: revealFlashAlarm 750ms ease-out forwards;
+}
+
+.result-badge-success,
+.result-badge-alarm {
+	animation: badgeImpact 420ms ease-out forwards;
+}
+
+.icon-pop-success {
+	animation: iconPopSuccess 450ms ease-out;
+}
+
+.icon-pop-alarm {
+	animation: iconPopAlarm 380ms ease-in-out;
+}
