@@ -74,15 +74,6 @@ export class LobbyManager {
     return { lobbyId: lobby.id, joinCode, playerId };
   }
 
-  findLobbyByPlayerId(playerId: string) {
-    for (const lobby of this.lobbiesById.values()) {
-      if (lobby.players.has(playerId)) {
-        return lobby;
-      }
-    }
-    return null;
-  }
-
   leaveLobby(joinCode: string, playerId: string) {
     const lobby = this.lobbiesByCode.get(joinCode);
     if (!lobby) return null;
@@ -149,6 +140,15 @@ export class LobbyManager {
 
   getLobbyByCode(joinCode: string) {
     return this.lobbiesByCode.get(joinCode);
+  }
+
+  findLobbyByPlayerId(playerId: string) {
+    for (const lobby of this.lobbiesById.values()) {
+      if (lobby.players.has(playerId)) {
+        return lobby;
+      }
+    }
+    return null;
   }
 
   removeSocket(socketId: string) {

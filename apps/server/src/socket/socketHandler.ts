@@ -8,9 +8,9 @@ export function setupSocketHandlers(io: Server) {
     console.log(" Connected:", socket.id);
 
     // Auto-reconnect if deviceId is provided
-    const deviceId = socket.handshake.auth.deviceId;
+    const deviceId = socket.handshake.auth.deviceId; // deviceID is used as playerID to allow clean reconnect
     if (deviceId) {
-      const lobby = lobbyManager.findLobbyByPlayerId(deviceId);
+      const lobby = lobbyManager.findLobbyByPlayerId(deviceId); 
       if (lobby) {
         console.log(`Auto-reconnecting player ${deviceId} to lobby ${lobby.joinCode}`);
         lobbyManager.reconnectPlayerByCode(lobby.joinCode, deviceId, socket.id);
