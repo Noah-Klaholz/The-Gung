@@ -1,7 +1,7 @@
-import * as dm from "./DeckManager.js";
-import * as pe from "./utils/PokerEvaluator.js";
-import type { Card } from "./utils/Card.js";
-import type { LobbyPlayer } from "../lobby/lobbyManager.js";
+import * as dm from "./DeckManager.ts";
+import * as pe from "./utils/PokerEvaluator.ts";
+import type { Card } from "./utils/Card.ts";
+import type { LobbyPlayer } from "../lobby/lobbyManager.ts";
 
 type ChipColor = "white" | "yellow" | "orange" | "red";
 

@@ -3,9 +3,6 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "type": "module",
-  "engines": {
-    "node": ">=20 <21"
-  },
   "scripts": {
     "dev": "ts-node src/index.ts",
     "build": "tsc",

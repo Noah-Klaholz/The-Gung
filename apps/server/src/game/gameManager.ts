@@ -1,6 +1,6 @@
-import type { Lobby } from "../lobby/lobbyManager.js";
-import { gameLogic } from "./gameLogic.js";
-import type { ChipAction, HeistResult } from "./gameLogic.js";
+import type { Lobby } from "../lobby/lobbyManager.ts";
+import { gameLogic } from "./gameLogic.ts";
+import type { ChipAction, HeistResult } from "./gameLogic.ts";
 
 interface ActiveGame {
   lobbyCode: string;
