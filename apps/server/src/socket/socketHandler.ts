@@ -1,8 +1,8 @@
 import { Server, Socket } from "socket.io";
-import { LobbyManager } from "../lobby/lobbyManager.ts";
-import { GameManager } from "../game/gameManager.ts";
+import { LobbyManager } from "../lobby/lobbyManager.js";
+import { GameManager } from "../game/gameManager.js";
 import { randomUUID } from "crypto";
-import type { ChipAction } from "../game/gameLogic.ts";
+import type { ChipAction } from "../game/gameLogic.js";
 
 const lobbyManager = new LobbyManager();
 const gameManager = new GameManager();

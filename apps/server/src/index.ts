@@ -1,7 +1,7 @@
 import http from "http";
 import { Server } from "socket.io";
-import { setupSocketHandlers } from "./socket/socketHandler.ts";
-import { CORS_ORIGINS, SERVER_PORT } from "./config.ts";
+import { setupSocketHandlers } from "./socket/socketHandler.js";
+import { CORS_ORIGINS, SERVER_PORT } from "./config.js";
 
 const httpServer = http.createServer();
 
