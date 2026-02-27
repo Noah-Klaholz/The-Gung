@@ -1,5 +1,13 @@
 # The Gung
 
+## Status badges
+
+After your repo is on GitHub, replace `<OWNER>` and `<REPO>` below and keep these at the top of this README:
+
+[![Deploy Readiness](https://github.com/noah-klaholz/the-gung/actions/workflows/deploy-readiness.yml/badge.svg?branch=main)](https://github.com/noah-klaholz/the-gung/actions/workflows/deploy-readiness.yml)
+[![Deploy On Green CI](https://github.com/noah-klaholz/the-gung/actions/workflows/deploy-on-green.yml/badge.svg?branch=main)](https://github.com/noah-klaholz/the-gung/actions/workflows/deploy-on-green.yml)
+[![Post-Merge Smoke](https://github.com/noah-klaholz/the-gung/actions/workflows/post-merge-smoke.yml/badge.svg?branch=main)](https://github.com/noah-klaholz/the-gung/actions/workflows/post-merge-smoke.yml)
+
 A local multiplayer implementation of **The Gang** (co-op poker with hidden information), consisting of:
 
 - `apps/server`: Socket.IO server + game logic
@@ -82,62 +90,59 @@ This repo now includes deployment config files:
 - `render.yaml` (backend service definition)
 - `vercel.json` (frontend build/install commands from monorepo)
 
-### Recommended protected-main workflow (GitHub + Vercel + Render)
+### Recommended no-PR CI workflow (GitHub + Vercel + Render)
 
-Use short-lived feature branches and merge to `main` only through pull requests.
+For a small team, you can push directly to `main` and still avoid bad deployments by using CI as a deployment gate.
 
-#### 1) Branch strategy
+#### 1) What this repo now does
 
-- Create branches like `feature/<name>` from `main`
-- Open a PR into `main`
-- Merge only after all required checks pass
-- Disable direct pushes to `main`
-
-#### 2) Required CI checks
-
-This repo includes two GitHub Actions workflows:
+This repo includes three GitHub Actions workflows:
 
 - `.github/workflows/deploy-readiness.yml`
-   - Runs on every PR to `main`
+   - Runs on every push to `main`
    - Executes: `npm ci`, `npm run lint` (advisory), `npm run build --workspace=server`, `npm run build --workspace=web`
-   - Make this workflow a **required status check** in branch protection
+   - If a build fails, this workflow fails
+
+- `.github/workflows/deploy-on-green.yml`
+   - Runs after `Deploy Readiness`
+   - Triggers Render and Vercel deploy hooks only when `Deploy Readiness` succeeded on `main`
 
 - `.github/workflows/post-merge-smoke.yml`
    - Runs on every push to `main`
-   - Calls production frontend URL and backend `/healthz`
-   - Fails fast if deployed endpoints are not reachable
+   - Optionally checks production frontend URL and backend `/healthz`
+   - Skips cleanly when smoke-check variables are not configured yet
 
-#### 3) GitHub branch protection (for `main`)
+#### 2) GitHub setup (step by step)
 
-In GitHub: **Settings → Branches → Add branch protection rule**
+1. Open repo **Settings → Secrets and variables → Actions → Secrets**
+2. Add deploy hooks:
+   - `RENDER_DEPLOY_HOOK_URL`
+   - `VERCEL_DEPLOY_HOOK_URL`
+3. Open **Settings → Secrets and variables → Actions → Variables**
+4. Add optional smoke URLs:
+   - `PROD_WEB_URL` (e.g. `https://the-gung.vercel.app`)
+   - `PROD_SERVER_URL` (e.g. `https://the-gung-server.onrender.com`)
 
-Recommended toggles:
+#### 3) Render setup (step by step)
 
-- Require a pull request before merging
-- Require approvals: at least 1
-- Require status checks to pass before merging
-   - Select `Lint and Build (Server + Web)` from the `Deploy Readiness` workflow
-- Require branches to be up to date before merging
-- Restrict who can push to matching branches (or fully disable direct pushes)
+1. Open your Render service
+2. Disable auto deploy on Git push (`main`) so GitHub Actions is the gate
+3. Create a **Deploy Hook** in Render and copy the URL
+4. Save it as GitHub secret `RENDER_DEPLOY_HOOK_URL`
 
-#### 4) Configure production smoke URLs
+#### 4) Vercel setup (step by step)
 
-In GitHub: **Settings → Secrets and variables → Actions → Variables**
+1. Open your Vercel project
+2. Disable automatic production deploys from Git push
+3. Create a **Deploy Hook** (Production) and copy the URL
+4. Save it as GitHub secret `VERCEL_DEPLOY_HOOK_URL`
 
-- `PROD_WEB_URL` = your Vercel production URL (e.g. `https://the-gung.vercel.app`)
-- `PROD_SERVER_URL` = your Render backend URL (e.g. `https://the-gung-server.onrender.com`)
+#### 5) Resulting flow
 
-#### 5) Optional local pre-push guard
-
-Before pushing:
-
-```bash
-npm run lint
-npm run build --workspace=server
-npm run build --workspace=web
-```
-
-This is optional convenience; the PR check is the actual gate.
+1. Push to `main`
+2. `Deploy Readiness` runs builds
+3. If builds pass, `Deploy On Green CI` triggers Render/Vercel deploys
+4. If builds fail, deploy hooks are not called and production stays unchanged
 
 #### Public repo safety
 

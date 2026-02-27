@@ -15,17 +15,22 @@ jobs:
       PROD_SERVER_URL: ${{ vars.PROD_SERVER_URL }}
 
     steps:
-      - name: Validate required URLs are configured
+      - name: Detect smoke-check config
+        id: config
         run: |
           if [ -z "$PROD_WEB_URL" ] || [ -z "$PROD_SERVER_URL" ]; then
-            echo "Set repository variables PROD_WEB_URL and PROD_SERVER_URL in GitHub Settings > Secrets and variables > Actions."
-            exit 1
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Smoke checks skipped (set PROD_WEB_URL and PROD_SERVER_URL to enable)."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Check frontend responds
+        if: steps.config.outputs.enabled == 'true'
         run: |
           curl --fail --show-error --silent --location "$PROD_WEB_URL" > /dev/null
 
       - name: Check backend health endpoint
+        if: steps.config.outputs.enabled == 'true'
         run: |
           curl --fail --show-error --silent --location "$PROD_SERVER_URL/healthz" > /dev/null
