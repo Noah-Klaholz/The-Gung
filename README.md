@@ -70,6 +70,35 @@ apps/
 - Server only: `npm run dev:server`
 - Web only: `npm run dev:web`
 
+### Deploy (free-tier friendly)
+
+Recommended setup:
+
+- `apps/web` on Vercel (Hobby)
+- `apps/server` on a Socket-capable host (e.g. Render/Fly)
+
+Why not all on Vercel: this project uses long-lived Socket.IO connections and in-memory lobby/game state. That is better served by a continuously running Node process.
+
+#### Environment variables
+
+- Server (`apps/server`):
+   - `CORS_ORIGIN=https://<your-vercel-domain>`
+   - optional `SERVER_PORT=9000` (local override)
+   - `PORT` is provided by many hosts automatically
+
+- Web (`apps/web`):
+   - `NEXT_PUBLIC_SOCKET_URL=https://<your-backend-domain>`
+
+#### URL bootstrapping order (when you don't know URLs yet)
+
+1. Deploy backend first with temporary CORS value (or include your expected Vercel domain pattern).
+2. Copy backend URL and set `NEXT_PUBLIC_SOCKET_URL` in Vercel.
+3. Deploy frontend on Vercel.
+4. Copy the final Vercel URL and update backend `CORS_ORIGIN`.
+5. Redeploy backend (or restart service).
+
+You can repeat steps 4-5 whenever your frontend domain changes (preview domains, custom domain, etc.).
+
 ### Important files
 
 - `apps/server/src/socket/socketHandler.ts` – central event registration
