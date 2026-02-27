@@ -9,17 +9,15 @@
     "dev:server": "npm run dev --workspace=server",
     "dev:web": "npm run dev --workspace=web",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
-    "build": "next build",
-    "start": "next start",
+    "build:server": "npm run build --workspace=server",
+    "build:web": "npm run build --workspace=web",
+    "build": "npm run build:server && npm run build:web",
+    "start:server": "npm run start --workspace=server",
+    "start:web": "npm run start --workspace=web",
+    "start": "npm run start:web",
     "lint": "eslint"
   },
-  "dependencies": {
-    "next": "16.1.6",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "socket.io": "^4.8.3",
-    "uuid": "^13.0.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

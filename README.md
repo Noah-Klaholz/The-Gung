@@ -72,32 +72,82 @@ apps/
 
 ### Deploy (free-tier friendly)
 
-Recommended setup:
+Target architecture:
 
-- `apps/web` on Vercel (Hobby)
-- `apps/server` on a Socket-capable host (e.g. Render/Fly)
+- Backend (`apps/server`) on Render Web Service (free plan)
+- Frontend (`apps/web`) on Vercel (Hobby)
 
-Why not all on Vercel: this project uses long-lived Socket.IO connections and in-memory lobby/game state. That is better served by a continuously running Node process.
+This repo now includes deployment config files:
 
-#### Environment variables
+- `render.yaml` (backend service definition)
+- `vercel.json` (frontend build/install commands from monorepo)
+
+#### Public repo safety
+
+- Never commit real `.env` files.
+- Keep secrets only in Render/Vercel dashboard environment settings.
+- `render.yaml` and `vercel.json` in this repo are secret-free and safe to publish.
+
+#### 1) Prepare lockfile + verify builds
+
+From repo root:
+
+```bash
+npm install
+npm run build --workspace=server
+npm run build --workspace=web
+```
+
+This updates and syncs `package-lock.json` with the root `package.json` and workspace manifests.
+
+#### 2) Deploy backend to Render
+
+1. Push this repo to GitHub.
+2. In Render: **New +** → **Blueprint** and select this repo (uses `render.yaml`).
+3. In the created `the-gung-server` service, set environment variable:
+   - `CORS_ORIGIN=https://<your-vercel-production-domain>`
+4. Deploy.
+5. Copy backend URL, e.g. `https://the-gung-server.onrender.com`.
+
+Notes:
+
+- Render provides `PORT` automatically.
+- Health check uses `GET /healthz`.
+
+#### 3) Deploy frontend to Vercel
+
+1. In Vercel: **Add New Project** → import this repo.
+2. Keep project root at repository root (the included `vercel.json` runs web workspace build).
+3. Add environment variable:
+   - `NEXT_PUBLIC_SOCKET_URL=https://<your-render-backend-domain>`
+4. Deploy.
+5. Copy frontend production URL, e.g. `https://the-gung.vercel.app`.
+
+#### 4) Final CORS wiring
+
+1. Go back to Render service env vars.
+2. Ensure `CORS_ORIGIN` equals your final Vercel production URL.
+3. Trigger redeploy/restart of backend.
+
+#### 5) Optional local production check
+
+From repo root:
+
+```bash
+npm run build
+npm run start:server
+npm run start:web
+```
+
+#### Environment variables summary
 
 - Server (`apps/server`):
-   - `CORS_ORIGIN=https://<your-vercel-domain>`
-   - optional `SERVER_PORT=9000` (local override)
-   - `PORT` is provided by many hosts automatically
+  - `CORS_ORIGIN=https://<your-vercel-production-domain>`
+  - `PORT` (auto on Render)
+  - optional local-only `SERVER_PORT=9000`
 
 - Web (`apps/web`):
-   - `NEXT_PUBLIC_SOCKET_URL=https://<your-backend-domain>`
-
-#### URL bootstrapping order (when you don't know URLs yet)
-
-1. Deploy backend first with temporary CORS value (or include your expected Vercel domain pattern).
-2. Copy backend URL and set `NEXT_PUBLIC_SOCKET_URL` in Vercel.
-3. Deploy frontend on Vercel.
-4. Copy the final Vercel URL and update backend `CORS_ORIGIN`.
-5. Redeploy backend (or restart service).
-
-You can repeat steps 4-5 whenever your frontend domain changes (preview domains, custom domain, etc.).
+  - `NEXT_PUBLIC_SOCKET_URL=https://<your-render-backend-domain>`
 
 ### Important files
 

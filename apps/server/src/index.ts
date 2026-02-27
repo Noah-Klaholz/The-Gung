@@ -1,9 +1,18 @@
 import http from "http";
 import { Server } from "socket.io";
-import { setupSocketHandlers } from "./socket/socketHandler.ts";
-import { CORS_ORIGINS, SERVER_PORT } from "./config.ts";
+import { setupSocketHandlers } from "./socket/socketHandler.js";
+import { CORS_ORIGINS, SERVER_PORT } from "./config.js";
 
-const httpServer = http.createServer();
+const httpServer = http.createServer((req, res) => {
+  if (req.url === "/" || req.url === "/healthz") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("ok");
+    return;
+  }
+
+  res.writeHead(404, { "Content-Type": "text/plain" });
+  res.end("Not found");
+});
 
 const io = new Server(httpServer, {
   cors: {
