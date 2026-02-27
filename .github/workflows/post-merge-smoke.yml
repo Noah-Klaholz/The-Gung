@@ -1,0 +1,31 @@
+name: Post-Merge Smoke
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Check deployed endpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PROD_WEB_URL: ${{ vars.PROD_WEB_URL }}
+      PROD_SERVER_URL: ${{ vars.PROD_SERVER_URL }}
+
+    steps:
+      - name: Validate required URLs are configured
+        run: |
+          if [ -z "$PROD_WEB_URL" ] || [ -z "$PROD_SERVER_URL" ]; then
+            echo "Set repository variables PROD_WEB_URL and PROD_SERVER_URL in GitHub Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Check frontend responds
+        run: |
+          curl --fail --show-error --silent --location "$PROD_WEB_URL" > /dev/null
+
+      - name: Check backend health endpoint
+        run: |
+          curl --fail --show-error --silent --location "$PROD_SERVER_URL/healthz" > /dev/null

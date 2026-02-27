@@ -82,6 +82,63 @@ This repo now includes deployment config files:
 - `render.yaml` (backend service definition)
 - `vercel.json` (frontend build/install commands from monorepo)
 
+### Recommended protected-main workflow (GitHub + Vercel + Render)
+
+Use short-lived feature branches and merge to `main` only through pull requests.
+
+#### 1) Branch strategy
+
+- Create branches like `feature/<name>` from `main`
+- Open a PR into `main`
+- Merge only after all required checks pass
+- Disable direct pushes to `main`
+
+#### 2) Required CI checks
+
+This repo includes two GitHub Actions workflows:
+
+- `.github/workflows/deploy-readiness.yml`
+   - Runs on every PR to `main`
+   - Executes: `npm ci`, `npm run lint` (advisory), `npm run build --workspace=server`, `npm run build --workspace=web`
+   - Make this workflow a **required status check** in branch protection
+
+- `.github/workflows/post-merge-smoke.yml`
+   - Runs on every push to `main`
+   - Calls production frontend URL and backend `/healthz`
+   - Fails fast if deployed endpoints are not reachable
+
+#### 3) GitHub branch protection (for `main`)
+
+In GitHub: **Settings → Branches → Add branch protection rule**
+
+Recommended toggles:
+
+- Require a pull request before merging
+- Require approvals: at least 1
+- Require status checks to pass before merging
+   - Select `Lint and Build (Server + Web)` from the `Deploy Readiness` workflow
+- Require branches to be up to date before merging
+- Restrict who can push to matching branches (or fully disable direct pushes)
+
+#### 4) Configure production smoke URLs
+
+In GitHub: **Settings → Secrets and variables → Actions → Variables**
+
+- `PROD_WEB_URL` = your Vercel production URL (e.g. `https://the-gung.vercel.app`)
+- `PROD_SERVER_URL` = your Render backend URL (e.g. `https://the-gung-server.onrender.com`)
+
+#### 5) Optional local pre-push guard
+
+Before pushing:
+
+```bash
+npm run lint
+npm run build --workspace=server
+npm run build --workspace=web
+```
+
+This is optional convenience; the PR check is the actual gate.
+
 #### Public repo safety
 
 - Never commit real `.env` files.
