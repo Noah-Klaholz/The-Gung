@@ -2,8 +2,6 @@
 
 ## Status badges
 
-After your repo is on GitHub, replace `<OWNER>` and `<REPO>` below and keep these at the top of this README:
-
 [![Deploy Readiness](https://github.com/noah-klaholz/the-gung/actions/workflows/deploy-readiness.yml/badge.svg?branch=main)](https://github.com/noah-klaholz/the-gung/actions/workflows/deploy-readiness.yml)
 [![Deploy On Green CI](https://github.com/noah-klaholz/the-gung/actions/workflows/deploy-on-green.yml/badge.svg?branch=main)](https://github.com/noah-klaholz/the-gung/actions/workflows/deploy-on-green.yml)
 [![Post-Merge Smoke](https://github.com/noah-klaholz/the-gung/actions/workflows/post-merge-smoke.yml/badge.svg?branch=main)](https://github.com/noah-klaholz/the-gung/actions/workflows/post-merge-smoke.yml)
@@ -90,9 +88,7 @@ This repo now includes deployment config files:
 - `render.yaml` (backend service definition)
 - `vercel.json` (frontend build/install commands from monorepo)
 
-### Recommended no-PR CI workflow (GitHub + Vercel + Render)
-
-For a small team, you can push directly to `main` and still avoid bad deployments by using CI as a deployment gate.
+### Workflow (GitHub + Vercel + Render)
 
 #### 1) What this repo now does
 
