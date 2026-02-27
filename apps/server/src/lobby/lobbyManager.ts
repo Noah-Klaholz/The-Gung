@@ -1,4 +1,4 @@
-import { v4 as uuid } from "uuid";
+import { randomUUID } from "node:crypto";
 
 export interface LobbyPlayer {
   id: string;
@@ -37,7 +37,7 @@ export class LobbyManager {
   private lobbiesByCode = new Map<string, Lobby>();
 
   createLobby(hostName: string, socketId: string, playerId: string) {
-    const lobbyId = uuid();
+    const lobbyId = randomUUID();
 
     // Ensure unique join code
     let joinCode: string;
