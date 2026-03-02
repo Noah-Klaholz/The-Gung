@@ -22,6 +22,7 @@ interface GamePlayerState {
     id: string;
     name: string;
     chips: PlayerChips;
+    lockedIn: boolean;
 }
 
 interface ShowdownPlayerResult {
@@ -68,7 +69,6 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
     const [myCards, setMyCards] = useState<Card[]>([]);
     const [players, setPlayers] = useState<GamePlayerState[]>([]);
     const [roundChips, setRoundChips] = useState<number[]>([]);
-    const [selectedChip, setSelectedChip] = useState<number | null>(null);
     const [successes, setSuccesses] = useState(0);
     const [failures, setFailures] = useState(0);
     const [heistNumber, setHeistNumber] = useState(0);
@@ -107,14 +107,13 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                     id: p.id,
                     name: p.name,
                     chips: p.chips ?? { white: null, yellow: null, orange: null, red: null },
+                    lockedIn: p.lockedIn ?? false,
                 })));
             }
 
             if (priv) {
                 setMyCards((priv.hand ?? []).map((c: any) => convertCard(c)).filter(Boolean) as Card[]);
             }
-
-            setSelectedChip(null);
         };
 
         const handleHeistResult = (data: HeistResult) => {
@@ -190,19 +189,25 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
         };
     }, [showShowdown, heistResult]);
 
-    // Chip actions
-    const handleChipSelect = (star: number) => {
-        setSelectedChip(star);
-    };
-
-    const handleConfirmChip = () => {
-        if (selectedChip === null) return;
-        socket.emit("CHIP_ACTION", {
-            joinCode,
-            playerId,
-            action: { type: "take_center", star: selectedChip },
-        });
-        setSelectedChip(null);
+    // Chip actions — direct one-click
+    const handleTakeChip = (chipValue: number) => {
+        // Check if the chip is owned by another player
+        const owner = players.find(p => p.chips[currentColor] === chipValue);
+        if (owner && owner.id !== playerId) {
+            // Steal from player
+            socket.emit("CHIP_ACTION", {
+                joinCode,
+                playerId,
+                action: { type: "take_player", fromPlayerId: owner.id },
+            });
+        } else if (!owner) {
+            // Take from center
+            socket.emit("CHIP_ACTION", {
+                joinCode,
+                playerId,
+                action: { type: "take_center", star: chipValue },
+            });
+        }
     };
 
     const handleReturnChip = () => {
@@ -213,13 +218,12 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
         });
     };
 
-    const handleTakePlayerChip = (fromPlayerId: string) => {
+    const handleToggleLockIn = () => {
         socket.emit("CHIP_ACTION", {
             joinCode,
             playerId,
-            action: { type: "take_player", fromPlayerId },
+            action: { type: "toggle_lock_in" },
         });
-        setSelectedChip(null);
     };
 
     // Get current player's chip for the current color
@@ -233,6 +237,13 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
     const currentColor = phaseToColor[phase] ?? "white";
     const myPlayerState = players.find(p => p.id === playerId);
     const myCurrentChip = myPlayerState?.chips[currentColor] ?? null;
+    const myLockedIn = myPlayerState?.lockedIn ?? false;
+    const totalPlayers = players.length;
+
+    // Get chip owner for the Available Bids grid
+    const getChipOwner = (val: number) => {
+        return players.find(p => p.chips[currentColor] === val);
+    };
 
     // UI Helpers
     const phaseColorMap: Record<string, string> = {
@@ -279,37 +290,20 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
         const symbol = getSuitSymbol(card.suit);
         const color = getSuitColorClass(card.suit);
 
-        if (['A', 'J', 'Q', 'K', '10'].includes(card.rank)) {
-            return (
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <span className={`text-6xl ${color}`}>{symbol}</span>
-                </div>
-            );
-        }
-
-        const count = parseInt(card.rank);
-        if (isNaN(count)) return null;
-
-        const gridClass = count <= 3 ? "flex flex-col" : "grid grid-cols-2";
-
         return (
-            <div className={`absolute inset-0 flex items-center justify-center p-6 ${color}`}>
-                <div className={`${gridClass} gap-x-4 gap-y-2`}>
-                    {Array.from({ length: count }).map((_, i) => (
-                        <span key={i} className="text-xl leading-none">{symbol}</span>
-                    ))}
-                </div>
+            <div className="absolute inset-0 flex items-center justify-center">
+                <span className={`text-6xl ${color}`}>{symbol}</span>
             </div>
         );
     };
 
     return (
-        <div className="min-h-screen bg-black text-white flex items-center justify-center p-4 overflow-hidden relative">
+        <div className="min-h-screen bg-black text-white flex items-center justify-center p-2 overflow-hidden relative">
             <div className={`absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-from)_0%,_var(--tw-gradient-via)_40%,_black_100%)] ${activeTableSkin.backgroundGradientClass} opacity-100 z-0`} />
 
-            <div className="relative z-10 w-full max-w-[1450px] h-[95vh] flex flex-col gap-4">
+            <div className="relative z-10 w-full max-w-[1450px] h-[95vh] flex flex-col gap-2 pt-2">
 
-                <header className="flex items-center justify-between h-20 px-6">
+                <header className="flex items-center justify-between h-12 px-6">
                     <div className="text-3xl font-black bg-gradient-to-r from-red-500 via-yellow-500 to-orange-500 bg-clip-text text-transparent tracking-tighter italic">
                         THE GUNG
                     </div>
@@ -318,32 +312,87 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
 
                 <div className="flex-1 flex gap-4 overflow-hidden">
 
-                    <main className="flex-1 bg-zinc-950 rounded-3xl border border-zinc-800 shadow-2xl flex flex-col overflow-hidden">
+                    {/* Left Sidebar: Order Claimed */}
+                    <aside className="w-[300px] shrink-0 bg-[#0a0a0a] rounded-xl border border-zinc-800/60 shadow-2xl flex flex-col overflow-hidden">
+                        <div className="h-16 flex items-center justify-center border-b border-zinc-800/60 relative">
+                            <span className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">
+                                Order Claimed
+                            </span>
+                            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-zinc-700 to-transparent opacity-50"></div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                            {[...players].sort((a, b) => a.id === playerId ? -1 : b.id === playerId ? 1 : 0).map(p => {
+                                const isMe = p.id === playerId;
+                                return (
+                                    <div key={p.id} className="p-3 bg-zinc-900/20 rounded-xl border border-zinc-800/40 flex flex-col items-center gap-3">
+                                        <div className={`text-[11px] font-bold ${isMe ? 'text-zinc-300' : 'text-zinc-500'} truncate w-full text-center flex items-center justify-center gap-1`}>
+                                            {p.name} {isMe && <span className="text-zinc-500">(You)</span>}
+                                            {p.lockedIn && <span className="text-green-500 text-[10px]" title="Locked In">✓</span>}
+                                        </div>
+                                        <div className="flex gap-2 justify-center">
+                                            {chipColors.map((color) => {
+                                                const chip = p.chips[color];
+                                                const canStealChip =
+                                                    p.id !== playerId &&
+                                                    color === currentColor &&
+                                                    chip !== null &&
+                                                    phase !== "SHOWDOWN" &&
+                                                    phase !== "FINISHED" &&
+                                                    phase !== "INIT";
 
+                                                const isTaken = chip !== null;
+
+                                                let chipColorClass = 'bg-[#e5e5e5] text-black shadow-md';
+                                                if (color === 'white') chipColorClass = 'bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.4)]';
+                                                if (color === 'yellow') chipColorClass = 'bg-yellow-400 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]';
+                                                if (color === 'orange') chipColorClass = 'bg-orange-500 text-white shadow-[0_0_10px_rgba(249,115,22,0.5)]';
+                                                if (color === 'red') chipColorClass = 'bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.5)]';
+
+                                                return (
+                                                    <button
+                                                        key={color}
+                                                        type="button"
+                                                        onClick={() => canStealChip && chip !== null && handleTakeChip(chip)}
+                                                        disabled={!canStealChip}
+                                                        className={`w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-black transition-all ${isTaken ? chipColorClass : 'bg-[#141414] border border-zinc-800/80 text-zinc-700'} ${canStealChip ? "cursor-pointer hover:scale-110 hover:ring-2 hover:ring-white/80" : "cursor-default"}`}
+                                                    >
+                                                        {chip ?? "-"}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </aside>
+
+                    {/* Center: The Heist */}
+                    <main className="flex-1 bg-[#0a0a0a] rounded-xl border border-zinc-800/60 shadow-2xl flex flex-col overflow-hidden relative">
                         {/* Top Campaign Bar */}
-                        <div className="h-16 bg-zinc-900 flex items-center justify-between px-8 border-b border-zinc-800">
-                            <div className="flex gap-8">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Heist:</span>
-                                    <span className="text-yellow-500 font-black">{heistNumber}</span>
+                        <div className="h-16 flex items-center justify-between px-4 border-b border-zinc-800/60 relative">
+                            {/* Left Stats */}
+                            <div className="flex gap-4 items-center">
+                                <div className="text-zinc-300 font-bold tracking-wide text-[14px]">
+                                    Heist #{heistNumber}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Vaults:</span>
-                                    <span className="text-green-500 font-black drop-shadow-[0_0_8px_rgba(34,197,94,0.5)]">{successes}/3</span>
+                                <div className="text-yellow-500 font-bold tracking-wide text-[14px]">
+                                    Vaults: {successes}/3
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Alarms:</span>
-                                    <span className="text-red-500 font-black drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]">{failures}/3</span>
+                                <div className="text-[#ef4444] font-bold tracking-wide text-[14px]">
+                                    Alarms: {failures}/3
                                 </div>
                             </div>
 
+                            {/* Right Status */}
                             <div className="flex items-center gap-4">
-                                <div className="px-4 py-1 bg-zinc-800 border border-zinc-700 rounded-full text-xs font-black tracking-[0.2em]">
-                                    PHASE: <span className="text-yellow-500">{phase}</span>
+                                <div className="px-5 py-1.5 bg-[#141414] border border-zinc-800 rounded-full flex items-center gap-2 shadow-inner">
+                                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">PHASE:</span>
+                                    <span className="text-[10px] text-zinc-300 font-black uppercase tracking-widest">{phase}</span>
                                 </div>
                                 <div className="relative group">
-                                    <button className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors border border-zinc-700">?</button>
-                                    <div className="absolute top-10 right-0 w-80 bg-zinc-900 border border-zinc-800 p-4 rounded-xl shadow-2xl hidden group-hover:block z-50">
+                                    <button className="w-8 h-8 rounded-full bg-[#141414] flex items-center justify-center text-zinc-500 hover:text-white transition-colors border border-zinc-800 shadow-inner">?</button>
+                                    <div className="absolute top-10 right-0 w-80 bg-[#111] border border-zinc-800 p-4 rounded-xl shadow-2xl hidden group-hover:block z-50">
                                         <h4 className="text-[10px] font-bold text-zinc-500 uppercase mb-3 tracking-widest">Hand Rankings</h4>
                                         <div className="grid text-[10px] gap-y-1.5" style={{ gridTemplateColumns: '1fr auto auto' }}>
                                             {[
@@ -368,173 +417,159 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                                     </div>
                                 </div>
                             </div>
+                            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-zinc-700 to-transparent opacity-30"></div>
                         </div>
 
-                        <div className="flex-1 flex overflow-hidden">
+                        {/* Center Layout Overlay (The Heist string) */}
+                        <div className="flex-1 relative flex flex-col bg-[#0a0a0a]">
+                            <div className={`absolute inset-0 ${activeTableSkin.auraClass} pointer-events-none opacity-40`} />
 
-                            {/* Left Sidebar: Chip History */}
-                            <aside className="w-64 bg-zinc-950 border-r border-zinc-900 flex flex-col">
-                                <div className="p-4 border-b border-zinc-900 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
-                                    Player Logistics
-                                </div>
-                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                    {players.map(p => (
-                                        <div key={p.id} className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/50">
-                                            <div className="text-xs font-bold truncate mb-3 flex items-center gap-2">
-                                                <span
-                                                    title={lobbyPlayers.find((player) => player.id === p.id)?.isConnected === false ? "Disconnected" : "Connected"}
-                                                    className={`inline-block w-2.5 h-2.5 rounded-full ${lobbyPlayers.find((player) => player.id === p.id)?.isConnected === false ? "bg-red-500" : "bg-green-500"}`}
-                                                />
-                                                {p.name}
-                                            </div>
-                                            <div className="flex gap-2">
-                                                {chipColors.map((color) => {
-                                                    const chip = p.chips[color];
-                                                    const canStealChip =
-                                                        p.id !== playerId &&
-                                                        color === currentColor &&
-                                                        chip !== null &&
-                                                        phase !== "SHOWDOWN" &&
-                                                        phase !== "FINISHED" &&
-                                                        phase !== "INIT";
-                                                    const colorStyles: Record<string, string> = {
-                                                        white: "bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.5)]",
-                                                        yellow: "bg-yellow-400 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]",
-                                                        orange: "bg-orange-500 text-white shadow-[0_0_10px_rgba(249,115,22,0.5)]",
-                                                        red: "bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.5)]",
-                                                    };
-                                                    const style = chip !== null ? colorStyles[color] : "bg-transparent border-dashed";
-                                                    return (
-                                                        <button
-                                                            key={color}
-                                                            type="button"
-                                                            onClick={() => canStealChip && handleTakePlayerChip(p.id)}
-                                                            disabled={!canStealChip}
-                                                            className={`w-8 h-8 rounded-full border border-zinc-800 flex items-center justify-center text-[10px] font-bold transition-all ${style} ${canStealChip ? "cursor-pointer hover:scale-110 hover:ring-2 hover:ring-yellow-400/60" : "cursor-default"}`}
-                                                        >
-                                                            {chip ?? ""}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </aside>
+                            {/* "THE HEIST" TEXT */}
+                            <div className="absolute top-12 left-0 right-0 text-center pointer-events-none">
+                                <span className="text-xs font-black tracking-[0.3em] text-zinc-500 uppercase">
+                                    The Heist
+                                </span>
+                            </div>
 
-                            {/* Center: The Heist */}
-                            <div className="flex-1 relative flex flex-col">
-
-                                <div className={`absolute inset-0 ${activeTableSkin.auraClass} pointer-events-none`} />
-
-                                {/* Community Cards */}
-                                <div className="flex-1 flex items-center justify-center gap-1">
-                                    {communityCards.map((card, idx) => (
-                                        <div key={idx} className={`w-28 h-40 rounded-xl transition-all duration-700 ${card ? `${activeCardSkin.surfaceClass} shadow-[0_15px_30px_rgba(0,0,0,0.5)]` : activeCardSkin.placeholderClass}`}>
-                                            {card && (
-                                                <div className={`p-2 h-full flex flex-col justify-between ${activeCardSkin.textClass} font-black italic relative overflow-hidden`}>
-                                                    <div className={`text-xl leading-none ${getSuitColorClass(card.suit)}`}>
-                                                        {card.rank}<br />
-                                                        <span className="text-base">{getSuitSymbol(card.suit)}</span>
-                                                    </div>
-                                                    {renderCardPattern(card)}
-                                                    <div className={`text-xl leading-none self-end rotate-180 ${getSuitColorClass(card.suit)}`}>
-                                                        {card.rank}<br />
-                                                        <span className="text-base">{getSuitSymbol(card.suit)}</span>
-                                                    </div>
+                            {/* Community Cards */}
+                            <div className="flex-1 flex items-center justify-center gap-4 pt-6">
+                                {communityCards.map((card, idx) => (
+                                    <div key={idx} className={`w-24 h-36 rounded-xl transition-all duration-700 border border-zinc-800/80 ${card ? `${activeCardSkin.surfaceClass} shadow-[0_15px_30px_rgba(0,0,0,0.5)] bg-white` : 'bg-transparent border-zinc-700 border-dashed'}`}>
+                                        {card ? (
+                                            <div className={`p-2 h-full flex flex-col justify-between ${activeCardSkin.textClass} text-black font-black italic relative overflow-hidden`}>
+                                                <div className={`text-lg leading-none ${getSuitColorClass(card.suit)}`}>
+                                                    {card.rank}
                                                 </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Middle Action Bar */}
-                                <div className="h-24 bg-zinc-900/80 backdrop-blur-md border-t border-zinc-800 flex items-center justify-between px-8 relative">
-
-                                    {/* Return chip button (left) */}
-                                    {myCurrentChip !== null && (
-                                        <button
-                                            onClick={handleReturnChip}
-                                            className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 font-bold text-[10px] uppercase tracking-widest rounded-lg transition-all text-zinc-400 hover:text-white"
-                                        >
-                                            Return ✕
-                                        </button>
-                                    )}
-                                    {myCurrentChip === null && <div />}
-
-                                    {/* Active Selection Display (center) */}
-                                    <div className="absolute left-1/2 -translate-x-1/2 w-16 h-16 rounded-full border-4 border-dashed border-zinc-700 flex items-center justify-center">
-                                        {(selectedChip ?? myCurrentChip) !== null ? (
-                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-black shadow-[0_0_20px_rgba(220,38,38,0.5)] ${currentChipColor}`}>
-                                                {selectedChip ?? myCurrentChip}
+                                                {renderCardPattern(card)}
+                                                <div className={`text-lg leading-none self-end rotate-180 ${getSuitColorClass(card.suit)}`}>
+                                                    {card.rank}
+                                                </div>
                                             </div>
                                         ) : (
-                                            <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-600 text-xs font-bold">
-                                                ?
+                                            /* Empty placeholder dots or similar to match the screenshot */
+                                            <div className="w-full h-full rounded-xl bg-[#0d0d0d] flex items-center justify-center text-zinc-800/50">
+                                                <div className="grid grid-cols-3 gap-2 opacity-30">
+                                                    <span className="text-[8px]">●</span><span className="text-[8px]">●</span><span className="text-[8px]">●</span>
+                                                    <span className="text-[8px]">●</span><span className="text-[8px]">●</span><span className="text-[8px]">●</span>
+                                                    <span className="text-[8px]">●</span><span className="text-[8px]">●</span><span className="text-[8px]">●</span>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
+                                ))}
+                            </div>
 
-                                    {/* Confirm Chip Button (right) */}
-                                    <div className="flex flex-col items-end gap-1">
-                                        <button
-                                            onClick={handleConfirmChip}
-                                            disabled={selectedChip === null}
-                                            className="px-4 py-2 bg-green-700 hover:bg-green-600 font-black text-[10px] uppercase tracking-widest rounded-lg transition-all shadow-[0_0_12px_rgba(22,163,74,0.3)] disabled:opacity-40 disabled:cursor-not-allowed"
-                                        >
-                                            Confirm ▶
-                                        </button>
+                            {/* Divider line above bottom area */}
+                            <div className="h-[1px] w-full bg-zinc-800/60 mt-auto"></div>
+
+                            {/* Bottom Area (Available Bids, Hand Cards, Your Claim) */}
+                            <div className="h-64 bg-[#111111] flex items-start justify-between relative">
+
+                                {/* LEFT: Available Bids Grid */}
+                                <div className="w-1/3 flex flex-col justify-start pl-4 pt-2 h-full">
+                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">
+                                        Available Bids ({currentColor})
+                                    </span>
+                                    <div className="grid grid-cols-3 gap-y-3 gap-x-1 w-max">
+                                        {Array.from({ length: totalPlayers }, (_, i) => i + 1).map(chipValue => {
+                                            const owner = getChipOwner(chipValue);
+                                            const isMine = owner?.id === playerId;
+                                            const isTaken = owner !== undefined;
+                                            return (
+                                                <div key={chipValue} className="relative flex flex-col items-center gap-1.5">
+                                                    <button
+                                                        onClick={() => { if (!isMine) handleTakeChip(chipValue); }}
+                                                        disabled={isMine}
+                                                        className={`w-14 h-14 rounded-full flex flex-col items-center justify-center font-black transition-all text-xl
+                                                        ${isMine ? `${currentChipColor} ring-4 ring-white/50 scale-105` :
+                                                                isTaken ? 'bg-[#2a2a2a] text-zinc-600 border border-zinc-700 opacity-60' :
+                                                                    `${currentChipColor} border border-transparent hover:-translate-y-1 hover:scale-105`
+                                                            }
+                                                        `}
+                                                        title={owner ? (isMine ? 'Your chip' : `Steal from ${owner.name}`) : 'Take chip'}
+                                                    >
+                                                        <span>{chipValue}</span>
+                                                    </button>
+                                                    <span className={`text-[10px] uppercase font-black truncate text-center ${isTaken ? 'text-[#ef4444]' : 'text-zinc-400'}`}>
+                                                        {isTaken ? 'TAKEN' : 'FREE'}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
 
-                                {/* Bottom Player Area */}
-                                <div className="h-48 bg-zinc-950 flex flex-col justify-end p-8 relative">
-
-                                    {/* Chip Pool */}
-                                    <div className="absolute left-8 -top-24">
-                                        <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Available Chips</div>
-                                        <div className="flex gap-3 flex-wrap">
-                                            {roundChips.map((chip) => (
-                                                <button
-                                                    key={chip}
-                                                    onClick={() => handleChipSelect(chip)}
-                                                    className={`w-12 h-12 rounded-full border-2 flex items-center justify-center text-sm font-black transition-all hover:scale-110 active:scale-90 ${selectedChip === chip
-                                                        ? "border-yellow-400 ring-2 ring-yellow-400/50 " + currentChipColor
-                                                        : "border-transparent " + currentChipColor
-                                                        }`}
-                                                >
-                                                    {chip}
-                                                </button>
-                                            ))}
+                                {/* CENTER: Your Claim + Lock-in Button + Hand Cards Stack */}
+                                <div className="w-1/3 flex flex-col items-center h-full relative pt-10">
+                                    {/* Your Claim & Button Section */}
+                                    <div className="flex flex-col items-center mb-6">
+                                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Your Claim</span>
+                                        <div className="flex flex-row gap-6 items-center">
+                                            <div className="flex gap-4 items-center justify-center">
+                                                {myCurrentChip !== null ? (
+                                                    <button
+                                                        onClick={handleReturnChip}
+                                                        className={`w-12 h-12 rounded-full border-2 border-transparent flex items-center justify-center font-black text-xl transition hover:scale-95 ${currentChipColor}`}
+                                                        title="Click to return chip"
+                                                    >
+                                                        {myCurrentChip}
+                                                    </button>
+                                                ) : (
+                                                    <div className="w-12 h-12 rounded-full border-2 border-dashed border-zinc-700/60 bg-[#161616] flex items-center justify-center text-zinc-700 font-bold text-[8px] shadow-inner uppercase tracking-widest">
+                                                        EMPTY
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
 
                                     {/* Hand Cards */}
-                                    <div className="flex justify-center gap-2 -mb-20">
+                                    <div className="flex justify-center gap-3 mt-4">
                                         {myCards.map((card, idx) => (
-                                            <div key={idx} className={`w-24 h-36 ${activeCardSkin.surfaceClass} rounded-lg shadow-2xl transition-all hover:-translate-y-8 cursor-pointer relative overflow-hidden group`}>
-                                                <div className={`p-2 h-full flex flex-col justify-between ${activeCardSkin.textClass} font-black italic`}>
+                                            <div key={idx} className={`w-[85px] h-[125px] ${activeCardSkin.surfaceClass} bg-white rounded-xl shadow-2xl transition-all hover:-translate-y-2 cursor-pointer relative overflow-hidden group border border-zinc-300`}>
+                                                <div className={`p-2 h-full flex flex-col justify-between ${activeCardSkin.textClass} text-black font-black italic relative z-10 pointer-events-none`}>
                                                     <div className={`text-base leading-none ${getSuitColorClass(card.suit)}`}>
-                                                        {card.rank}<br />
-                                                        <span className="text-xs">{getSuitSymbol(card.suit)}</span>
+                                                        {card.rank}
                                                     </div>
                                                     {renderCardPattern(card)}
                                                     <div className={`text-base leading-none self-end rotate-180 ${getSuitColorClass(card.suit)}`}>
-                                                        {card.rank}<br />
-                                                        <span className="text-xs">{getSuitSymbol(card.suit)}</span>
+                                                        {card.rank}
                                                     </div>
                                                 </div>
-                                                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                                             </div>
                                         ))}
                                     </div>
+                                </div>
 
+                                {/* RIGHT: Bids einloggen Button */}
+                                <div className="w-1/3 flex flex-col justify-start items-end pr-4 pt-6 h-full">
+                                    <button
+                                        onClick={() => {
+                                            if (myCurrentChip !== null) {
+                                                handleToggleLockIn();
+                                            }
+                                        }}
+                                        disabled={myCurrentChip === null}
+                                        className={`px-6 py-3 rounded-lg text-xs font-black tracking-widest uppercase transition-all duration-300 border ${myCurrentChip === null
+                                            ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                                            : myLockedIn
+                                                ? 'bg-[#16a34a] border-[#15803d] text-white shadow-[0_0_20px_rgba(22,163,74,0.3)] hover:bg-[#15803d]'
+                                                : 'bg-[#e5e5e5] text-black border-zinc-400 hover:bg-white hover:scale-105 shadow-xl'
+                                            }`}
+                                        title={myCurrentChip === null ? "Requires chip" : "Toggle Lock-In"}
+                                    >
+                                        {myLockedIn ? 'Eingeloggt ✓' : 'Bids einloggen'}
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </main>
 
-                    <ChatBox className="w-80" joinCode={joinCode} />
+                    {/* Right Sidebar: ChatBox */}
+                    {/* Make ChatBox match the new dark aesthetics. We pass standard props, ChatBox handles its own container. */}
+                    <aside className="w-[300px] shrink-0 bg-[#0a0a0a] rounded-xl border border-zinc-800/60 shadow-2xl flex flex-col overflow-hidden">
+                        <ChatBox className="flex-1 rounded-none border-none shadow-none" joinCode={joinCode} />
+                    </aside>
 
                 </div>
             </div>
@@ -555,7 +590,7 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                             <p className="text-sm text-zinc-400 mt-1">
                                 Vaults: {heistResult.successes}/3 · Alarms: {heistResult.failures}/3
                             </p>
-                            {revealPhase === "impact" }
+                            {revealPhase === "impact"}
                         </div>
                         <button
                             onClick={() => setShowShowdown(false)}

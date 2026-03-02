@@ -53,10 +53,20 @@ export class GameManager {
       };
     }
 
+    let finalHeistResolved = result.heistResolved;
+    let finalGameEnded = result.gameEnded;
+
+    // Trigger bots to play their turns automatically if applicable
+    if (!finalGameEnded) {
+      const botResult = activeGame.game.playBotTurns();
+      if (botResult.heistResolved) finalHeistResolved = botResult.heistResolved;
+      if (botResult.gameEnded) finalGameEnded = botResult.gameEnded;
+    }
+
     return {
       ok: true,
-      heistResolved: result.heistResolved ?? null,
-      gameEnded: result.gameEnded ?? false,
+      heistResolved: finalHeistResolved ?? null,
+      gameEnded: finalGameEnded ?? false,
     };
   }
 

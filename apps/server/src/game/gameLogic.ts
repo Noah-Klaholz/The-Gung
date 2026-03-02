@@ -18,6 +18,8 @@ export interface GamePlayer {
   hand: Card[];
   trueRank: number;
   chips: PlayerRoundChips;
+  lockedIn: boolean;
+  isBot?: boolean;
 }
 
 export interface ShowdownPlayerResult {
@@ -58,6 +60,9 @@ export type ChipAction =
   }
   | {
     type: "return_own";
+  }
+  | {
+    type: "toggle_lock_in";
   };
 
 interface RoundConfig {
@@ -99,6 +104,8 @@ export class gameLogic {
         orange: null,
         red: null,
       },
+      lockedIn: false,
+      isBot: p.isBot,
     }));
 
     this.deck = dm.createDeck();
@@ -114,6 +121,41 @@ export class gameLogic {
     this.lastHeistResult = null;
     this.roundIndex = 0;
     this.phase = "init";
+  }
+
+  playBotTurns(): { heistResolved: HeistResult | null; gameEnded: boolean } {
+    if (this.phase === "init" || this.phase === "showdown" || this.phase === "finished") {
+      return { heistResolved: null, gameEnded: false };
+    }
+
+    const round = ROUND_SEQUENCE[this.roundIndex];
+    let advanced = false;
+    let finalHeistResolved: HeistResult | null = null;
+    let finalGameEnded = false;
+
+    for (const player of this.players) {
+      if (player.isBot && !player.lockedIn) {
+        // If bot doesn't have a chip, take a random one from the center
+        if (player.chips[round.color] === null && this.roundChips.length > 0) {
+          const randomChipIndex = Math.floor(Math.random() * this.roundChips.length);
+          const chipToTake = this.roundChips[randomChipIndex];
+
+          this.applyChipAction(player.id, { type: "take_center", star: chipToTake });
+        }
+
+        // Then lock in
+        if (player.chips[round.color] !== null && !player.lockedIn) {
+          const res = this.applyChipAction(player.id, { type: "toggle_lock_in" });
+          if (res.heistResolved) finalHeistResolved = res.heistResolved;
+          if (res.gameEnded) finalGameEnded = true;
+          advanced = true;
+        }
+      }
+    }
+
+    // Since `applyChipAction` can recursively resolve the phase if all players lock in, 
+    // we return the aggregated results.
+    return { heistResolved: finalHeistResolved, gameEnded: finalGameEnded };
   }
 
   startGame() {
@@ -141,6 +183,7 @@ export class gameLogic {
       player.chips.yellow = null;
       player.chips.orange = null;
       player.chips.red = null;
+      player.lockedIn = false;
     }
 
     this.communityCards = dm.drawCard(this.deck, 5);
@@ -193,6 +236,7 @@ export class gameLogic {
 
       this.roundChips.splice(chipIndex, 1);
       actor.chips[color] = action.star;
+      actor.lockedIn = false;
     }
 
     if (action.type === "take_player") {
@@ -217,6 +261,8 @@ export class gameLogic {
 
       actor.chips[color] = stolenChip;
       fromPlayer.chips[color] = null;
+      actor.lockedIn = false;
+      fromPlayer.lockedIn = false;
     }
 
     if (action.type === "return_own") {
@@ -227,6 +273,14 @@ export class gameLogic {
 
       this.roundChips.push(ownCurrentChip);
       actor.chips[color] = null;
+      actor.lockedIn = false;
+    }
+
+    if (action.type === "toggle_lock_in") {
+      if (actor.chips[color] === null) {
+        return { ok: false, error: "You must claim a chip before locking in" };
+      }
+      actor.lockedIn = !actor.lockedIn;
     }
 
     this.roundChips.sort((a, b) => a - b);
@@ -257,6 +311,7 @@ export class gameLogic {
         id: player.id,
         name: player.name,
         chips: { ...player.chips },
+        lockedIn: player.lockedIn,
       })),
       lastHeistResult: this.lastHeistResult,
     };
@@ -281,9 +336,15 @@ export class gameLogic {
 
     const round = ROUND_SEQUENCE[this.roundIndex];
     const everyoneHasChip = this.players.every((player) => player.chips[round.color] !== null);
+    const everyoneLockedIn = this.players.every((player) => player.lockedIn);
 
-    if (!everyoneHasChip) {
+    if (!everyoneHasChip || !everyoneLockedIn) {
       return null;
+    }
+
+    // Reset lock-in for next phase
+    for (const player of this.players) {
+      player.lockedIn = false;
     }
 
     if (this.roundIndex < ROUND_SEQUENCE.length - 1) {

@@ -173,6 +173,17 @@ export function setupSocketHandlers(io: Server) {
       emitLobbyUpdate(io, joinCode);
     });
 
+    socket.on("TOGGLE_ADVANCED_MODE", ({ joinCode, playerId }) => {
+      const success = lobbyManager.toggleAdvancedMode(joinCode, playerId);
+
+      if (!success) {
+        socket.emit("ERROR", { message: "Could not toggle Advanced Mode" });
+        return;
+      }
+
+      emitLobbyUpdate(io, joinCode);
+    });
+
     socket.on("disconnect", () => {
       console.log("Disconnected", socket.id);
       const disconnectedPlayers = lobbyManager.handleDisconnect(socket.id);
@@ -199,6 +210,48 @@ export function setupSocketHandlers(io: Server) {
         lobbyPlayer?.name ||
         "Unknown";
 
+      if (trimmedMessage.startsWith("/cheat ")) {
+        const cmd = trimmedMessage.slice(7).trim().toLowerCase();
+
+        if (cmd === "enable") {
+          if (lobby) {
+            lobby.cheatsEnabled = true;
+            emitSystemChat(io, targetJoinCode, "Cheats enabled.");
+          }
+        } else if (cmd === "disable") {
+          if (lobby) {
+            lobby.cheatsEnabled = false;
+            // Remove bots
+            const bots = Array.from(lobby.players.values()).filter(p => p.isBot);
+            for (const bot of bots) {
+              lobby.players.delete(bot.id);
+            }
+            if (bots.length > 0) {
+              emitLobbyUpdate(io, targetJoinCode);
+            }
+            emitSystemChat(io, targetJoinCode, "Cheats disabled. Bots removed if any.");
+          }
+        } else if (cmd.startsWith("addbot")) {
+          if (lobby && lobby.cheatsEnabled) {
+            const botId = `bot-${randomUUID().substring(0, 8)}`;
+            const botCount = Array.from(lobby.players.values()).filter(p => p.isBot).length + 1;
+            lobby.players.set(botId, {
+              id: botId,
+              name: `Bot ${botCount}`,
+              ready: true,
+              isBot: true,
+              socketId: undefined
+            });
+            emitLobbyUpdate(io, targetJoinCode);
+            emitSystemChat(io, targetJoinCode, `Bot ${botCount} added.`);
+          } else {
+            // Also send back locally to cheating player only? Using system chat for ease for now
+            emitChatUpdate(io, targetJoinCode, "Error: Cheats are not enabled.", "[System]");
+          }
+        }
+        return;
+      }
+
       emitChatUpdate(io, targetJoinCode, trimmedMessage, sender);
     });
 
@@ -221,6 +274,7 @@ function emitLobbyUpdate(io: Server, joinCode: string) {
       isConnected: Boolean(p.socketId),
     })),
     status: lobby.status,
+    advancedMode: lobby.advancedMode,
   });
 }
 

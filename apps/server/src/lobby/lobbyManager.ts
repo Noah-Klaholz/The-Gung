@@ -5,6 +5,7 @@ export interface LobbyPlayer {
   name: string;
   socketId?: string;
   ready: boolean;
+  isBot?: boolean;
 }
 
 export interface Lobby {
@@ -13,6 +14,8 @@ export interface Lobby {
   players: Map<string, LobbyPlayer>;
   hostId: string;
   status: "waiting" | "playing";
+  advancedMode: boolean;
+  cheatsEnabled?: boolean;
 }
 
 interface DisconnectEvent {
@@ -58,6 +61,7 @@ export class LobbyManager {
       players: new Map([[playerId, host]]),
       hostId: playerId,
       status: "waiting",
+      advancedMode: false,
     };
 
     this.lobbiesById.set(lobbyId, lobby);
@@ -159,6 +163,17 @@ export class LobbyManager {
     if (!player) return false;
 
     player.ready = !player.ready;
+    return true;
+  }
+
+  toggleAdvancedMode(joinCode: string, playerId: string) {
+    const lobby = this.lobbiesByCode.get(joinCode);
+    if (!lobby) return false;
+
+    // Only host can toggle
+    if (lobby.hostId !== playerId) return false;
+
+    lobby.advancedMode = !lobby.advancedMode;
     return true;
   }
 
