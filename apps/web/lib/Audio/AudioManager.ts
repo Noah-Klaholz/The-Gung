@@ -10,7 +10,7 @@ export class AudioManager {
   private masterVolume = 1;
   private musicVolume = 0.5;
   private sfxVolume = 0.7;
-  private soundsInitialised = false;
+  private audioUnlocked = false;
 
   private constructor() {
     this.sounds = new Map();
@@ -24,8 +24,19 @@ export class AudioManager {
     return AudioManager.instance;
   }
 
-  public initSounds(): void {
-    this.soundsInitialised = true;
+  public async initAfterUserGesture(): Promise<void> {
+    if (this.audioUnlocked) return;
+
+    try {
+      if (Howler.ctx?.state !== "running") {
+        await Howler.ctx.resume();
+      }
+    } catch {
+      // keep locked if resume fails
+      return;
+    }
+
+    this.audioUnlocked = true;
   }
 
   public loadSound(name: string, src: string, category: SoundCategory = "sfx", loop = false): void {
@@ -37,6 +48,8 @@ export class AudioManager {
   }
 
   public playSound(name: string): void {
+    if(!this.audioUnlocked) return; // Autoplay guard: Most browsers block autoplay until first user gesture
+
     const sound = this.sounds.get(name);
     if (!sound) {
       console.error(`Sound with name "${name}" not found.`);
