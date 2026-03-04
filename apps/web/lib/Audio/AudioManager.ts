@@ -1,11 +1,20 @@
 import { Howl, Howler } from 'howler';
 
+type SoundCategory = "music" | "sfx";
+
 export class AudioManager {
   private static instance: AudioManager;
   private sounds: Map<string, Howl>;
+  private categories: Map<string, SoundCategory>;
+
+  private masterVolume = 1;
+  private musicVolume = 0.5;
+  private sfxVolume = 0.7;
+  private soundsInitialised = false;
 
   private constructor() {
     this.sounds = new Map();
+    this.categories = new Map();
   }
 
   public static getInstance(): AudioManager {
@@ -15,12 +24,16 @@ export class AudioManager {
     return AudioManager.instance;
   }
 
-  public loadSound(name: string, src: string): void {
-    if (this.sounds.has(name)) {
-      console.warn(`Sound with name "${name}" already exists. Overwriting.`);
-    }
-    const sound = new Howl({ src });
+  public initSounds(): void {
+    this.soundsInitialised = true;
+  }
+
+  public loadSound(name: string, src: string, category: SoundCategory = "sfx", loop = false): void {
+    const baseVolume = category == "music" ? this.musicVolume : this.sfxVolume;
+    const sound = new Howl({ src, loop, volume: baseVolume * this.masterVolume });
+
     this.sounds.set(name, sound);
+    this.categories.set(name, category);
   }
 
   public playSound(name: string): void {
@@ -41,7 +54,30 @@ export class AudioManager {
     sound.stop();
   }
 
-  public setVolume(volume: number): void {
-    Howler.volume(volume);
+  public setMasterVolume(volume: number): void {
+    this.masterVolume = Math.max(0, Math.min(1, volume));
+    this.refreshPerSoundVolumes();
   }
+
+  public setMusicVolume(volume: number): void {
+    this.masterVolume = Math.max(0, Math.min(1, volume));
+    this.refreshPerSoundVolumes("music");
+  }
+
+  public setSfxVolume(volume: number): void {
+    this.masterVolume = Math.max(0, Math.min(1, volume));
+    this.refreshPerSoundVolumes("sfx");
+  }
+
+  private refreshPerSoundVolumes(filter?: SoundCategory): void {
+    for (const [ name, sound ] of this.sounds.entries()) {
+      const category = this.categories.get(name) ?? "sfx";
+      if (filter && category !== filter) continue;
+
+      const base = category === "music" ? this.musicVolume : this.sfxVolume;
+      sound.volume(base * this.masterVolume);
+    }
+  }
+
+
 }
