@@ -326,6 +326,10 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                                 return (
                                     <div key={p.id} className="p-3 bg-zinc-900/20 rounded-xl border border-zinc-800/40 flex flex-col items-center gap-3">
                                         <div className={`text-[11px] font-bold ${isMe ? 'text-zinc-300' : 'text-zinc-500'} truncate w-full text-center flex items-center justify-center gap-1`}>
+                                            <span
+                                                    title={lobbyPlayers.find((player) => player.id === p.id)?.isConnected === false ? "Disconnected" : "Connected"}
+                                                    className={`inline-block w-2.5 h-2.5 rounded-full ${lobbyPlayers.find((player) => player.id === p.id)?.isConnected === false ? "bg-red-500" : "bg-green-500"}`}
+                                                />
                                             {p.name} {isMe && <span className="text-zinc-500">(You)</span>}
                                             {p.lockedIn && <span className="text-green-500 text-[10px]" title="Locked In">✓</span>}
                                         </div>
