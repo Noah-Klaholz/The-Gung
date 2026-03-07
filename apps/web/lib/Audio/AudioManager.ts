@@ -1,4 +1,7 @@
 import { Howl, Howler } from 'howler';
+import { createLogger } from '../logger';
+
+const log = createLogger("AudioManager");
 
 type SoundCategory = "music" | "sfx";
 
@@ -27,6 +30,7 @@ export class AudioManager {
   public async initAfterUserGesture(): Promise<void> {
     if (this.audioUnlocked) return;
 
+    /*
     try {
       if (Howler.ctx?.state !== "running") {
         await Howler.ctx.resume();
@@ -35,8 +39,33 @@ export class AudioManager {
       // keep locked if resume fails
       return;
     }
+      */
 
     this.audioUnlocked = true;
+  }
+
+  /*
+  * This function plays a sound based on a URL from Next.js public assets (/audio/...)
+  */
+  public play(url: string) {
+    const normalizedSrc = this.normalizeSrc(url);
+    const name = normalizedSrc.replace("/audio/", "").trim();
+    const category: SoundCategory = name.startsWith("music") ? "music" : "sfx";
+
+    if (!this.sounds.get(name)) {
+      this.loadSound(name, normalizedSrc, category, category === "music");
+    }
+
+    this.playSound(name);
+  }
+
+  private normalizeSrc(url: string): string {
+    const trimmed = url.trim();
+
+    if (trimmed.startsWith("/audio/")) return trimmed;
+    if (trimmed.startsWith("audio/")) return `/${trimmed}`;
+
+    return trimmed;
   }
 
   public loadSound(name: string, src: string, category: SoundCategory = "sfx", loop = false): void {
@@ -48,13 +77,23 @@ export class AudioManager {
   }
 
   public playSound(name: string): void {
-    if(!this.audioUnlocked) return; // Autoplay guard: Most browsers block autoplay until first user gesture
+    if (!this.audioUnlocked) {
+      log.debug("playSound ignored: audio still locked", { name });
+      return;
+    }
 
     const sound = this.sounds.get(name);
     if (!sound) {
-      console.error(`Sound with name "${name}" not found.`);
+      log.error(`Sound with name "${name}" not found.`);
       return;
     }
+
+    const category = this.categories.get(name) ?? "sfx";
+
+    if (category === "music" && sound.playing()) {
+      return;
+    }
+
     sound.play();
   }
 
