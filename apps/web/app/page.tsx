@@ -131,7 +131,7 @@ export default function RootPage() {
       await audio.initAfterUserGesture();
 
       audio.play("/audio/music/lobbyMusic.mp3");
-      audio.play("audio/sfx/click.mp3")
+      audio.play("/audio/sfx/click.mp3") //TODO: does not work properly in this one instance right here
 
       setCurrentView("SELECTION");
     }

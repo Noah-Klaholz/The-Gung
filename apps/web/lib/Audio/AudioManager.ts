@@ -1,5 +1,5 @@
-import { Howl, Howler } from 'howler';
-import { createLogger } from '../logger';
+import { Howl, Howler } from "howler";
+import { createLogger } from "../logger";
 
 const log = createLogger("AudioManager");
 
@@ -33,32 +33,38 @@ export class AudioManager {
   }
 
   /*
-  * This function plays a sound based on a URL from Next.js public assets (/audio/...)
-  */
+   * This function plays a sound based on a URL from Next.js public assets (/audio/...)
+   */
   public play(url: string) {
-    const normalizedSrc = this.normalizeSrc(url);
-    const name = normalizedSrc.replace("/audio/", "").trim();
-    const category: SoundCategory = name.startsWith("music") ? "music" : "sfx";
+    const normalized = url.trim().startsWith("/")
+      ? url.trim()
+      : `/${url.trim()}`;
 
-    if (!this.sounds.get(name)) {
-      this.loadSound(name, normalizedSrc, category, category === "music");
+    const path = normalized.replace(/^\/+/, "").toLowerCase();
+    const category: SoundCategory =
+      path.startsWith("audio/music/") || path.startsWith("music/")
+        ? "music"
+        : "sfx";
+
+    if (!this.sounds.get(normalized)) {
+      this.loadSound(normalized, normalized, category, category === "music");
     }
 
-    this.playSound(name);
+    this.playSound(normalized);
   }
 
-  private normalizeSrc(url: string): string {
-    const trimmed = url.trim();
-
-    if (trimmed.startsWith("/audio/")) return trimmed;
-    if (trimmed.startsWith("audio/")) return `/${trimmed}`;
-
-    return trimmed;
-  }
-
-  public loadSound(name: string, src: string, category: SoundCategory = "sfx", loop = false): void {
+  public loadSound(
+    name: string,
+    src: string,
+    category: SoundCategory = "sfx",
+    loop = false,
+  ): void {
     const baseVolume = category == "music" ? this.musicVolume : this.sfxVolume;
-    const sound = new Howl({ src, loop, volume: baseVolume * this.masterVolume });
+    const sound = new Howl({
+      src,
+      loop,
+      volume: baseVolume * this.masterVolume,
+    });
 
     this.sounds.set(name, sound);
     this.categories.set(name, category);
@@ -78,8 +84,17 @@ export class AudioManager {
 
     const category = this.categories.get(name) ?? "sfx";
 
-    if (category === "music" && sound.playing()) {
-      return;
+    if (category === "music") {
+      if (sound.playing()) return;
+
+      // Stop any other currently playing music before starting this one
+      for (const [otherName, otherSound] of this.sounds.entries()) {
+        if (otherName === name) continue;
+        const otherCategory = this.categories.get(otherName) ?? "sfx";
+        if (otherCategory === "music" && otherSound.playing()) {
+          otherSound.stop();
+        }
+      }
     }
 
     sound.play();
@@ -110,7 +125,7 @@ export class AudioManager {
   }
 
   private refreshPerSoundVolumes(filter?: SoundCategory): void {
-    for (const [ name, sound ] of this.sounds.entries()) {
+    for (const [name, sound] of this.sounds.entries()) {
       const category = this.categories.get(name) ?? "sfx";
       if (filter && category !== filter) continue;
 
@@ -118,6 +133,4 @@ export class AudioManager {
       sound.volume(base * this.masterVolume);
     }
   }
-
-
 }

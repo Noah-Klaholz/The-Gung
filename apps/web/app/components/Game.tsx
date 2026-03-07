@@ -5,6 +5,7 @@ import ChatBox from "./ChatBox";
 import { socket } from "../../lib/socket";
 import { CARD_SKINS, TABLE_SKINS, type CardSkin, type TableSkin } from "../../lib/skins";
 import { usePlayer } from "../../lib/context/playerContext";
+import { AudioManager } from "../../lib/Audio/AudioManager"
 
 interface Card {
     rank: string;
@@ -83,6 +84,18 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
 
     // Game over state
     const [gameOver, setGameOver] = useState<{ won: boolean; successes: number; failures: number } | null>(null);
+
+
+    // Game music
+    useEffect(() => {
+        const audio = AudioManager.getInstance();   
+        audio.play("/audio/music/gameMusic.mp3");
+
+        return () => {
+            audio.stopSound("/audio/music/gameMusic.mp3");
+        };
+
+    }, []);
 
     // Socket listeners
     useEffect(() => {
