@@ -161,6 +161,10 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
             return;
         }
 
+        const audio = AudioManager.getInstance();
+        audio.setPausedByUrl("/audio/music/gameMusic.mp3", true);
+        audio.play("/audio/sfx/reveal.mp3");
+
         setRevealedCount(0);
         setRevealPhase("intro");
         setResultBurst(null);
@@ -180,6 +184,8 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
 
                 if (i >= total) {
                     if (revealInterval) clearInterval(revealInterval);
+
+                    audio.setPausedByUrl("/audio/music/gameMusic.mp3", false);
 
                     const impactTimer = setTimeout(() => {
                         setRevealPhase("impact");

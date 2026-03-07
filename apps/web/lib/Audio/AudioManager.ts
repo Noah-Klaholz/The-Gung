@@ -1,5 +1,6 @@
 import { Howl, Howler } from "howler";
 import { createLogger } from "../logger";
+import { normalizeRepeatedSlashes } from "next/dist/shared/lib/utils";
 
 const log = createLogger("AudioManager");
 
@@ -32,13 +33,15 @@ export class AudioManager {
     this.audioUnlocked = true;
   }
 
+  private normalizeUrl(url: string): string {
+    return url.trim().startsWith("/") ? url.trim() : `/${url.trim()}`;
+  }
+
   /*
    * This function plays a sound based on a URL from Next.js public assets (/audio/...)
    */
   public play(url: string) {
-    const normalized = url.trim().startsWith("/")
-      ? url.trim()
-      : `/${url.trim()}`;
+    const normalized = this.normalizeUrl(url);
 
     const path = normalized.replace(/^\/+/, "").toLowerCase();
     const category: SoundCategory =
@@ -107,6 +110,42 @@ export class AudioManager {
       return;
     }
     sound.stop();
+  }
+
+  /**
+   * Pause or resume a loaded sound by URL.
+   * paused=true  -> pause
+   * paused=false -> resume
+   */
+  public setPausedByUrl(url: string, paused: boolean): void {
+    const normalized = this.normalizeUrl(url);
+    const sound = this.sounds.get(normalized);
+
+    if (!sound) {
+      log.error(`Sound with url "${normalized}" not found.`);
+      return;
+    }
+
+    if (paused) {
+      if (sound.playing()) sound.pause();
+      return;
+    }
+
+    const category = this.categories.get(normalized) ?? "sfx";
+    if (category === "music") {
+      // Keep only one music track active
+      for (const [otherName, otherSound] of this.sounds.entries()) {
+        if (otherName === normalized) continue;
+        const otherCategory = this.categories.get(otherName) ?? "sfx";
+        if (otherCategory === "music" && otherSound.playing()) {
+          otherSound.stop();
+        }
+      }
+    }
+
+    if (!sound.playing()) {
+      sound.play(); // resumes from paused position when paused
+    }
   }
 
   public setMasterVolume(volume: number): void {
