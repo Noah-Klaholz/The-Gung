@@ -129,7 +129,9 @@ export default function RootPage() {
       setPlayerName(trimmedName);
 
       await audio.initAfterUserGesture();
+
       audio.play("/audio/music/lobbyMusic.mp3");
+      audio.play("audio/sfx/click.mp3")
 
       setCurrentView("SELECTION");
     }

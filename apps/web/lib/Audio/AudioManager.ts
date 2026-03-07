@@ -11,7 +11,7 @@ export class AudioManager {
   private categories: Map<string, SoundCategory>;
 
   private masterVolume = 1;
-  private musicVolume = 0.5;
+  private musicVolume = 0.1;
   private sfxVolume = 0.7;
   private audioUnlocked = false;
 
@@ -29,18 +29,6 @@ export class AudioManager {
 
   public async initAfterUserGesture(): Promise<void> {
     if (this.audioUnlocked) return;
-
-    /*
-    try {
-      if (Howler.ctx?.state !== "running") {
-        await Howler.ctx.resume();
-      }
-    } catch {
-      // keep locked if resume fails
-      return;
-    }
-      */
-
     this.audioUnlocked = true;
   }
 
