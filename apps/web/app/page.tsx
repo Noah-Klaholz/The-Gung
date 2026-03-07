@@ -5,6 +5,7 @@ import { socket } from "../lib/socket";
 import { usePlayer, Player } from "../lib/context/playerContext";
 import Game from "./components/Game";
 import ChatBox from "./components/ChatBox";
+import { AudioManager } from "../lib/Audio/AudioManager"
 import {
   CARD_SKINS,
   DEFAULT_CARD_SKIN,
@@ -33,6 +34,8 @@ export default function RootPage() {
   const [isLobbyChatOpen, setIsLobbyChatOpen] = useState(false);
   const [cardSkin, setCardSkin] = useState<CardSkin>(DEFAULT_CARD_SKIN);
   const [tableSkin, setTableSkin] = useState<TableSkin>(DEFAULT_TABLE_SKIN);
+
+  const audio = AudioManager.getInstance();
 
   const resolvePlayerName = () => {
     const storedName = localStorage.getItem("playerName")?.trim();
@@ -118,12 +121,16 @@ export default function RootPage() {
   }, [tableSkin]);
 
   // --- Handlers ---
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = name.trim().slice(0, 25);
     if (trimmedName) {
       localStorage.setItem("playerName", trimmedName);
       setPlayerName(trimmedName);
+
+      await audio.initAfterUserGesture();
+      audio.play("/audio/music/lobbyMusic.mp3");
+
       setCurrentView("SELECTION");
     }
   };
