@@ -1,6 +1,6 @@
 import { Howl, Howler } from "howler";
 import { createLogger } from "../logger";
-import { normalizeRepeatedSlashes } from "next/dist/shared/lib/utils";
+import { type AudioSettings } from "../settings";
 
 const log = createLogger("AudioManager");
 
@@ -154,13 +154,21 @@ export class AudioManager {
   }
 
   public setMusicVolume(volume: number): void {
-    this.masterVolume = Math.max(0, Math.min(1, volume));
+    this.musicVolume = Math.max(0, Math.min(1, volume));
     this.refreshPerSoundVolumes("music");
   }
 
   public setSfxVolume(volume: number): void {
-    this.masterVolume = Math.max(0, Math.min(1, volume));
+    this.sfxVolume = Math.max(0, Math.min(1, volume));
     this.refreshPerSoundVolumes("sfx");
+  }
+
+  public getAudioSettings(): AudioSettings {
+    return {
+      master: this.masterVolume,
+      music: this.musicVolume,
+      sfx: this.sfxVolume,
+    };
   }
 
   private refreshPerSoundVolumes(filter?: SoundCategory): void {
