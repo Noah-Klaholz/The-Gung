@@ -84,7 +84,10 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
     const [showImpactFlash, setShowImpactFlash] = useState(false);
     const [isHandRanksOpen, setIsHandRanksOpen] = useState(false);
     const [isGameChatOpen, setIsGameChatOpen] = useState(false);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [gameError, setGameError] = useState<string | null>(null);
     const handRankPopoverRef = useRef<HTMLDivElement | null>(null);
+    const prevPhaseRef = useRef("PRE-FLOP");
 
     // Game over state
     const [gameOver, setGameOver] = useState<{ won: boolean; successes: number; failures: number } | null>(null);
@@ -108,7 +111,12 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
             const priv = data.privateState;
 
             if (pub) {
-                setPhase((pub.phase ?? "pre-flop").toUpperCase());
+                const newPhase = (pub.phase ?? "pre-flop").toUpperCase();
+                if (newPhase !== prevPhaseRef.current) {
+                    setSelectedChip(null);
+                }
+                prevPhaseRef.current = newPhase;
+                setPhase(newPhase);
                 setSuccesses(pub.successes ?? 0);
                 setFailures(pub.failures ?? 0);
                 setHeistNumber(pub.heistNumber ?? 0);
@@ -130,8 +138,6 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
             if (priv) {
                 setMyCards((priv.hand ?? []).map((c: any) => convertCard(c)).filter(Boolean) as Card[]);
             }
-
-            setSelectedChip(null);
         };
 
         const handleHeistResult = (data: HeistResult) => {
@@ -154,6 +160,25 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
             socket.off("GAME_ENDED", handleGameEnded);
         };
     }, [joinCode, playerId]);
+
+    // Re-request game state on socket reconnection
+    useEffect(() => {
+        const handleReconnect = () => {
+            socket.emit("REQUEST_GAME_STATE", { joinCode });
+        };
+        socket.on("connect", handleReconnect);
+        return () => { socket.off("connect", handleReconnect); };
+    }, [joinCode]);
+
+    // Show game errors (chip action failures etc.)
+    useEffect(() => {
+        const handleError = ({ message }: { message: string }) => {
+            setGameError(message);
+            setTimeout(() => setGameError(null), 4000);
+        };
+        socket.on("ERROR", handleError);
+        return () => { socket.off("ERROR", handleError); };
+    }, []);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -344,9 +369,17 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
 
             <div className="relative z-10 w-full max-w-[1680px] h-[min(96dvh,1050px)] flex flex-col gap-3 md:gap-4">
 
-                <header className="flex items-center justify-between h-16 md:h-20 px-3 md:px-6">
-                    <div className="text-2xl md:text-3xl font-black bg-gradient-to-r from-red-500 via-yellow-500 to-orange-500 bg-clip-text text-transparent tracking-tighter italic">
-                        THE GUNG
+                <header className="flex items-center justify-between h-14 md:h-20 px-3 md:px-6">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setIsSidebarOpen((prev) => !prev)}
+                            className="lg:hidden px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-xs font-bold uppercase tracking-wider text-zinc-200"
+                        >
+                            Players
+                        </button>
+                        <div className="text-2xl md:text-3xl font-black bg-gradient-to-r from-red-500 via-yellow-500 to-orange-500 bg-clip-text text-transparent tracking-tighter italic">
+                            THE GUNG
+                        </div>
                     </div>
                     <button
                         onClick={() => setIsGameChatOpen((prev) => !prev)}
@@ -428,8 +461,8 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
 
                         <div className="flex-1 flex overflow-hidden min-h-0">
 
-                            {/* Left Sidebar: Chip History */}
-                            <aside className="w-56 md:w-64 lg:w-72 bg-zinc-950 border-r border-zinc-900 flex flex-col shrink-0">
+                            {/* Left Sidebar: Chip History — hidden on small/tablet, visible on lg+ */}
+                            <aside className="hidden lg:flex w-72 bg-zinc-950 border-r border-zinc-900 flex-col shrink-0">
                                 <div className="p-4 border-b border-zinc-900 text-xs font-bold uppercase tracking-widest text-zinc-500">
                                     Player Logistics
                                 </div>
@@ -484,9 +517,9 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
                                 <div className={`absolute inset-0 ${activeTableSkin.auraClass} pointer-events-none`} />
 
                                 {/* Community Cards */}
-                                <div className="flex-1 flex items-center justify-center gap-1 md:gap-2 px-2 py-3 md:py-4 overflow-x-auto">
+                                <div className="flex-1 flex items-center justify-center gap-2 md:gap-3 px-3 py-3 md:py-4">
                                     {communityCards.map((card, idx) => (
-                                        <div key={idx} className={`w-20 h-28 sm:w-24 sm:h-36 md:w-28 md:h-40 rounded-xl transition-all duration-700 shrink-0 ${card ? `${activeCardSkin.surfaceClass} shadow-[0_15px_30px_rgba(0,0,0,0.5)]` : activeCardSkin.placeholderClass}`}>
+                                        <div key={idx} className={`w-[4.5rem] h-[6.5rem] sm:w-[5.5rem] sm:h-[8rem] md:w-[7rem] md:h-[10rem] lg:w-28 lg:h-40 rounded-xl transition-all duration-700 shrink-0 ${card ? `${activeCardSkin.surfaceClass} shadow-[0_15px_30px_rgba(0,0,0,0.5)]` : activeCardSkin.placeholderClass}`}>
                                             {card && (
                                                 <div className={`p-1.5 md:p-2 h-full flex flex-col justify-between ${activeCardSkin.textClass} font-black italic relative overflow-hidden`}>
                                                     <div className={`text-base md:text-xl leading-none ${getSuitColorClass(card.suit)}`}>
@@ -568,7 +601,7 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
                                     {/* Hand Cards */}
                                     <div className="flex justify-center gap-2 md:gap-3 flex-wrap">
                                         {myCards.map((card, idx) => (
-                                            <div key={idx} className={`w-20 h-32 sm:w-[5.5rem] sm:h-[8.5rem] md:w-24 md:h-36 ${activeCardSkin.surfaceClass} rounded-lg shadow-2xl transition-all hover:-translate-y-5 cursor-pointer relative overflow-hidden group active:scale-95`}>
+                                            <div key={idx} className={`w-[5rem] h-[7.5rem] sm:w-[5.5rem] sm:h-[8.5rem] md:w-[6.5rem] md:h-[9.5rem] lg:w-24 lg:h-36 ${activeCardSkin.surfaceClass} rounded-lg shadow-2xl transition-all hover:-translate-y-5 cursor-pointer relative overflow-hidden group active:scale-95`}>
                                                 <div className={`p-1.5 md:p-2 h-full flex flex-col justify-between ${activeCardSkin.textClass} font-black italic`}>
                                                     <div className={`text-sm md:text-base leading-none ${getSuitColorClass(card.suit)}`}>
                                                         {card.rank}<br />
@@ -590,14 +623,102 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
                         </div>
                     </main>
 
-                    <div className="w-full 2xl:w-80 2xl:shrink-0 min-h-0">
-                        <div className={`${isGameChatOpen ? "block" : "hidden"} 2xl:block h-full`}>
-                            <ChatBox className="w-full h-[18rem] md:h-[20rem] 2xl:h-full" joinCode={joinCode} />
-                        </div>
+                    {/* Chat sidebar — only on 2xl+ */}
+                    <div className="hidden 2xl:block w-80 shrink-0 min-h-0">
+                        <ChatBox className="w-full h-full" joinCode={joinCode} />
                     </div>
 
                 </div>
             </div>
+
+            {/* Chat overlay for < 2xl screens */}
+            {isGameChatOpen && (
+                <div className="fixed inset-0 z-[100] 2xl:hidden">
+                    <button
+                        type="button"
+                        aria-label="Close chat"
+                        onClick={() => setIsGameChatOpen(false)}
+                        className="absolute inset-0 bg-black/70"
+                    />
+                    <aside className="absolute right-0 top-0 h-full w-[min(92vw,26rem)] bg-zinc-950 border-l border-zinc-800 shadow-2xl flex flex-col">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
+                            <span className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">Comms Channel</span>
+                            <button
+                                type="button"
+                                onClick={() => setIsGameChatOpen(false)}
+                                className="px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:text-white text-xs font-bold uppercase tracking-wider"
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <ChatBox className="flex-1 border-0 rounded-none" joinCode={joinCode} />
+                    </aside>
+                </div>
+            )}
+
+            {/* Sidebar overlay for < lg screens */}
+            {isSidebarOpen && (
+                <div className="fixed inset-0 z-[90] lg:hidden">
+                    <button
+                        type="button"
+                        aria-label="Close sidebar"
+                        onClick={() => setIsSidebarOpen(false)}
+                        className="absolute inset-0 bg-black/70"
+                    />
+                    <aside className="absolute left-0 top-0 h-full w-[min(85vw,20rem)] bg-zinc-950 border-r border-zinc-800 shadow-2xl flex flex-col">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
+                            <span className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">Player Logistics</span>
+                            <button
+                                type="button"
+                                onClick={() => setIsSidebarOpen(false)}
+                                className="px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:text-white text-xs font-bold uppercase tracking-wider"
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {players.map(p => (
+                                <div key={p.id} className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/50">
+                                    <div className="text-sm font-bold truncate mb-3 flex items-center gap-2">
+                                        <span
+                                            title={lobbyPlayers.find((player) => player.id === p.id)?.isConnected === false ? "Disconnected" : "Connected"}
+                                            className={`inline-block w-2.5 h-2.5 rounded-full ${lobbyPlayers.find((player) => player.id === p.id)?.isConnected === false ? "bg-red-500" : "bg-green-500"}`}
+                                        />
+                                        {p.name}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {chipColors.map((color) => {
+                                            const chip = p.chips[color];
+                                            const colorStyles: Record<string, string> = {
+                                                white: "bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.5)]",
+                                                yellow: "bg-yellow-400 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]",
+                                                orange: "bg-orange-500 text-white shadow-[0_0_10px_rgba(249,115,22,0.5)]",
+                                                red: "bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.5)]",
+                                            };
+                                            const style = chip !== null ? colorStyles[color] : "bg-transparent border-dashed";
+                                            return (
+                                                <div
+                                                    key={color}
+                                                    className={`w-10 h-10 rounded-full border border-zinc-800 flex items-center justify-center text-xs font-bold ${style}`}
+                                                >
+                                                    {chip ?? ""}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </aside>
+                </div>
+            )}
+
+            {/* Game error toast */}
+            {gameError && (
+                <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[110] px-6 py-3 bg-red-900/90 border border-red-700 rounded-xl text-sm font-bold text-red-200 shadow-2xl animate-pulse">
+                    {gameError}
+                </div>
+            )}
 
             {/* HEIST RESULT / SHOWDOWN OVERLAY */}
             {showShowdown && heistResult && (
