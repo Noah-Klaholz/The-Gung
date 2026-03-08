@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ChatBox from "./ChatBox";
 import { socket } from "../../lib/socket";
 import { CARD_SKINS, TABLE_SKINS, type CardSkin, type TableSkin } from "../../lib/skins";
@@ -47,6 +47,7 @@ interface GameProps {
     playerId: string;
     joinCode: string;
     onLeave: () => void;
+    onOpenSettings: () => void;
     cardSkin: CardSkin;
     tableSkin: TableSkin;
 }
@@ -60,7 +61,7 @@ function convertCard(card: any): Card | null {
     return { rank, suit };
 }
 
-export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin }: GameProps) {
+export default function Game({ playerId, joinCode, onLeave, onOpenSettings, cardSkin, tableSkin }: GameProps) {
     const { players: lobbyPlayers } = usePlayer();
 
     // Server-driven state
@@ -81,6 +82,13 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
     const [revealPhase, setRevealPhase] = useState<"idle" | "intro" | "revealing" | "impact">("idle");
     const [resultBurst, setResultBurst] = useState<"success" | "alarm" | null>(null);
     const [showImpactFlash, setShowImpactFlash] = useState(false);
+    const [isHandRanksOpen, setIsHandRanksOpen] = useState(false);
+    const [isGameChatOpen, setIsGameChatOpen] = useState(false);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [gameError, setGameError] = useState<string | null>(null);
+    const [isConnected, setIsConnected] = useState(socket.connected);
+    const handRankPopoverRef = useRef<HTMLDivElement | null>(null);
+    const prevPhaseRef = useRef("PRE-FLOP");
 
     // Game over state
     const [gameOver, setGameOver] = useState<{ won: boolean; successes: number; failures: number } | null>(null);
@@ -104,7 +112,12 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
             const priv = data.privateState;
 
             if (pub) {
-                setPhase((pub.phase ?? "pre-flop").toUpperCase());
+                const newPhase = (pub.phase ?? "pre-flop").toUpperCase();
+                if (newPhase !== prevPhaseRef.current) {
+                    setSelectedChip(null);
+                }
+                prevPhaseRef.current = newPhase;
+                setPhase(newPhase);
                 setSuccesses(pub.successes ?? 0);
                 setFailures(pub.failures ?? 0);
                 setHeistNumber(pub.heistNumber ?? 0);
@@ -126,8 +139,6 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
             if (priv) {
                 setMyCards((priv.hand ?? []).map((c: any) => convertCard(c)).filter(Boolean) as Card[]);
             }
-
-            setSelectedChip(null);
         };
 
         const handleHeistResult = (data: HeistResult) => {
@@ -150,6 +161,44 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
             socket.off("GAME_ENDED", handleGameEnded);
         };
     }, [joinCode, playerId]);
+
+    // Track connection state & re-request game state on reconnection
+    useEffect(() => {
+        const onConnect = () => {
+            setIsConnected(true);
+            socket.emit("REQUEST_GAME_STATE", { joinCode });
+        };
+        const onDisconnect = () => setIsConnected(false);
+        socket.on("connect", onConnect);
+        socket.on("disconnect", onDisconnect);
+        setIsConnected(socket.connected);
+        return () => {
+            socket.off("connect", onConnect);
+            socket.off("disconnect", onDisconnect);
+        };
+    }, [joinCode]);
+
+    // Show game errors (chip action failures etc.)
+    useEffect(() => {
+        const handleError = ({ message }: { message: string }) => {
+            setGameError(message);
+            setTimeout(() => setGameError(null), 4000);
+        };
+        socket.on("ERROR", handleError);
+        return () => { socket.off("ERROR", handleError); };
+    }, []);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (!handRankPopoverRef.current) return;
+            if (!handRankPopoverRef.current.contains(event.target as Node)) {
+                setIsHandRanksOpen(false);
+            }
+        };
+
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     // Sequential reveal animation for showdown
     useEffect(() => {
@@ -216,6 +265,10 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
 
     const handleConfirmChip = () => {
         if (selectedChip === null) return;
+        if (!socket.connected) {
+            setGameError("Not connected to server — reconnecting…");
+            return;
+        }
         socket.emit("CHIP_ACTION", {
             joinCode,
             playerId,
@@ -225,6 +278,10 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
     };
 
     const handleReturnChip = () => {
+        if (!socket.connected) {
+            setGameError("Not connected to server — reconnecting…");
+            return;
+        }
         socket.emit("CHIP_ACTION", {
             joinCode,
             playerId,
@@ -233,6 +290,10 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
     };
 
     const handleTakePlayerChip = (fromPlayerId: string) => {
+        if (!socket.connected) {
+            setGameError("Not connected to server — reconnecting…");
+            return;
+        }
         socket.emit("CHIP_ACTION", {
             joinCode,
             playerId,
@@ -323,48 +384,80 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
     };
 
     return (
-        <div className="min-h-screen bg-black text-white flex items-center justify-center p-4 overflow-hidden relative">
+        <div className="app-shell min-h-[100dvh] bg-black text-white flex items-stretch justify-center overflow-hidden relative">
             <div className={`absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-from)_0%,_var(--tw-gradient-via)_40%,_black_100%)] ${activeTableSkin.backgroundGradientClass} opacity-100 z-0`} />
 
-            <div className="relative z-10 w-full max-w-[1450px] h-[95vh] flex flex-col gap-4">
+            <div className="relative z-10 w-full max-w-[1680px] h-[min(96dvh,1050px)] flex flex-col gap-3 md:gap-4">
 
-                <header className="flex items-center justify-between h-20 px-6">
-                    <div className="text-3xl font-black bg-gradient-to-r from-red-500 via-yellow-500 to-orange-500 bg-clip-text text-transparent tracking-tighter italic">
-                        THE GUNG
+                <header className="flex items-center justify-between h-14 md:h-20 px-3 md:px-6">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setIsSidebarOpen((prev) => !prev)}
+                            className="lg:hidden px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-xs font-bold uppercase tracking-wider text-zinc-200"
+                        >
+                            Players
+                        </button>
+                        <div className="text-2xl md:text-3xl font-black bg-gradient-to-r from-red-500 via-yellow-500 to-orange-500 bg-clip-text text-transparent tracking-tighter italic">
+                            THE GUNG
+                        </div>
+                        <span
+                            title={isConnected ? "Connected" : "Disconnected"}
+                            className={`w-2.5 h-2.5 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500 animate-pulse"}`}
+                        />
                     </div>
-                    <div className="w-32" />
+                    <button
+                        onClick={() => setIsGameChatOpen((prev) => !prev)}
+                        className="2xl:hidden px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-xs font-bold uppercase tracking-wider text-zinc-200"
+                    >
+                        {isGameChatOpen ? "Hide Chat" : "Show Chat"}
+                    </button>
                 </header>
 
-                <div className="flex-1 flex gap-4 overflow-hidden">
+                <div className="flex-1 flex flex-col 2xl:flex-row gap-3 md:gap-4 overflow-hidden min-h-0">
 
-                    <main className="flex-1 bg-zinc-950 rounded-3xl border border-zinc-800 shadow-2xl flex flex-col overflow-hidden">
+                    <main className="flex-1 bg-zinc-950 rounded-3xl border border-zinc-800 shadow-2xl flex flex-col overflow-hidden min-h-0">
 
                         {/* Top Campaign Bar */}
-                        <div className="h-16 bg-zinc-900 flex items-center justify-between px-8 border-b border-zinc-800">
-                            <div className="flex gap-8">
+                        <div className="bg-zinc-900 flex flex-wrap items-center justify-between px-4 md:px-8 py-3 gap-3 border-b border-zinc-800">
+                            <div className="flex flex-wrap gap-x-4 gap-y-2 md:gap-8">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Heist:</span>
+                                    <span className="text-xs md:text-sm text-zinc-500 font-bold uppercase tracking-widest">Heist:</span>
                                     <span className="text-yellow-500 font-black">{heistNumber}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Vaults:</span>
+                                    <span className="text-xs md:text-sm text-zinc-500 font-bold uppercase tracking-widest">Vaults:</span>
                                     <span className="text-green-500 font-black drop-shadow-[0_0_8px_rgba(34,197,94,0.5)]">{successes}/3</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs text-zinc-500 font-bold uppercase tracking-widest">Alarms:</span>
+                                    <span className="text-xs md:text-sm text-zinc-500 font-bold uppercase tracking-widest">Alarms:</span>
                                     <span className="text-red-500 font-black drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]">{failures}/3</span>
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-4">
-                                <div className="px-4 py-1 bg-zinc-800 border border-zinc-700 rounded-full text-xs font-black tracking-[0.2em]">
+                                <button
+                                    type="button"
+                                    onClick={onOpenSettings}
+                                    className="px-4 py-2 rounded-full bg-zinc-800 border border-zinc-700 text-xs md:text-sm font-bold uppercase tracking-wider text-zinc-200 hover:text-white"
+                                    aria-label="Open settings"
+                                >
+                                    Settings
+                                </button>
+                                <div className="px-4 py-1 bg-zinc-800 border border-zinc-700 rounded-full text-xs md:text-sm font-black tracking-[0.2em]">
                                     PHASE: <span className="text-yellow-500">{phase}</span>
                                 </div>
-                                <div className="relative group">
-                                    <button className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors border border-zinc-700">?</button>
-                                    <div className="absolute top-10 right-0 w-80 bg-zinc-900 border border-zinc-800 p-4 rounded-xl shadow-2xl hidden group-hover:block z-50">
-                                        <h4 className="text-[10px] font-bold text-zinc-500 uppercase mb-3 tracking-widest">Hand Rankings</h4>
-                                        <div className="grid text-[10px] gap-y-1.5" style={{ gridTemplateColumns: '1fr auto auto' }}>
+                                <div className="relative" ref={handRankPopoverRef}>
+                                    <button
+                                        onClick={() => setIsHandRanksOpen((prev) => !prev)}
+                                        aria-expanded={isHandRanksOpen}
+                                        className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-300 hover:text-white transition-colors border border-zinc-700"
+                                    >
+                                        ?
+                                    </button>
+                                    {isHandRanksOpen && (
+                                        <div className="absolute top-12 right-0 w-[22rem] max-w-[85vw] bg-zinc-900 border border-zinc-800 p-4 rounded-xl shadow-2xl z-50">
+                                        <h4 className="text-xs font-bold text-zinc-500 uppercase mb-3 tracking-widest">Hand Rankings</h4>
+                                        <div className="grid text-xs gap-y-1.5" style={{ gridTemplateColumns: '1fr auto auto' }}>
                                             {[
                                                 { name: "Royal Flush", ex: "A K Q J 10 ♥", rank: "10", gold: true },
                                                 { name: "Straight Flush", ex: "5 6 7 8 9 ♠", rank: "9" },
@@ -379,27 +472,28 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                                             ].map(h => (
                                                 <React.Fragment key={h.name}>
                                                     <span className={h.gold ? "font-bold text-yellow-400" : h.dim ? "text-zinc-500" : "text-zinc-300"}>{h.name}</span>
-                                                    <span className="text-zinc-600 font-mono mx-3">{h.ex}</span>
+                                                    <span className="text-zinc-600 font-mono mx-2 md:mx-3">{h.ex}</span>
                                                     <span className={`font-bold text-right ${h.gold ? "text-yellow-500" : h.dim ? "text-zinc-600" : "text-yellow-500"}`}>{h.rank}</span>
                                                 </React.Fragment>
                                             ))}
                                         </div>
                                     </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex-1 flex overflow-hidden">
+                        <div className="flex-1 flex overflow-hidden min-h-0">
 
-                            {/* Left Sidebar: Chip History */}
-                            <aside className="w-64 bg-zinc-950 border-r border-zinc-900 flex flex-col">
-                                <div className="p-4 border-b border-zinc-900 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                            {/* Left Sidebar: Chip History — hidden on small/tablet, visible on lg+ */}
+                            <aside className="hidden lg:flex w-72 bg-zinc-950 border-r border-zinc-900 flex-col shrink-0">
+                                <div className="p-4 border-b border-zinc-900 text-xs font-bold uppercase tracking-widest text-zinc-500">
                                     Player Logistics
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                                     {players.map(p => (
                                         <div key={p.id} className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/50">
-                                            <div className="text-xs font-bold truncate mb-3 flex items-center gap-2">
+                                            <div className="text-sm font-bold truncate mb-3 flex items-center gap-2">
                                                 <span
                                                     title={lobbyPlayers.find((player) => player.id === p.id)?.isConnected === false ? "Disconnected" : "Connected"}
                                                     className={`inline-block w-2.5 h-2.5 rounded-full ${lobbyPlayers.find((player) => player.id === p.id)?.isConnected === false ? "bg-red-500" : "bg-green-500"}`}
@@ -429,7 +523,7 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                                                             type="button"
                                                             onClick={() => canStealChip && handleTakePlayerChip(p.id)}
                                                             disabled={!canStealChip}
-                                                            className={`w-8 h-8 rounded-full border border-zinc-800 flex items-center justify-center text-[10px] font-bold transition-all ${style} ${canStealChip ? "cursor-pointer hover:scale-110 hover:ring-2 hover:ring-yellow-400/60" : "cursor-default"}`}
+                                                            className={`w-10 h-10 rounded-full border border-zinc-800 flex items-center justify-center text-xs font-bold transition-all active:scale-95 ${style} ${canStealChip ? "cursor-pointer hover:scale-110 hover:ring-2 hover:ring-yellow-400/60" : "cursor-default"}`}
                                                         >
                                                             {chip ?? ""}
                                                         </button>
@@ -447,19 +541,19 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                                 <div className={`absolute inset-0 ${activeTableSkin.auraClass} pointer-events-none`} />
 
                                 {/* Community Cards */}
-                                <div className="flex-1 flex items-center justify-center gap-1">
+                                <div className="flex-1 flex items-center justify-center gap-2 md:gap-3 px-3 py-3 md:py-4">
                                     {communityCards.map((card, idx) => (
-                                        <div key={idx} className={`w-28 h-40 rounded-xl transition-all duration-700 ${card ? `${activeCardSkin.surfaceClass} shadow-[0_15px_30px_rgba(0,0,0,0.5)]` : activeCardSkin.placeholderClass}`}>
+                                        <div key={idx} className={`w-[4.5rem] h-[6.5rem] sm:w-[5.5rem] sm:h-[8rem] md:w-[7rem] md:h-[10rem] lg:w-28 lg:h-40 rounded-xl transition-all duration-700 shrink-0 ${card ? `${activeCardSkin.surfaceClass} shadow-[0_15px_30px_rgba(0,0,0,0.5)]` : activeCardSkin.placeholderClass}`}>
                                             {card && (
-                                                <div className={`p-2 h-full flex flex-col justify-between ${activeCardSkin.textClass} font-black italic relative overflow-hidden`}>
-                                                    <div className={`text-xl leading-none ${getSuitColorClass(card.suit)}`}>
+                                                <div className={`p-1.5 md:p-2 h-full flex flex-col justify-between ${activeCardSkin.textClass} font-black italic relative overflow-hidden`}>
+                                                    <div className={`text-base md:text-xl leading-none ${getSuitColorClass(card.suit)}`}>
                                                         {card.rank}<br />
-                                                        <span className="text-base">{getSuitSymbol(card.suit)}</span>
+                                                        <span className="text-sm md:text-base">{getSuitSymbol(card.suit)}</span>
                                                     </div>
                                                     {renderCardPattern(card)}
-                                                    <div className={`text-xl leading-none self-end rotate-180 ${getSuitColorClass(card.suit)}`}>
+                                                    <div className={`text-base md:text-xl leading-none self-end rotate-180 ${getSuitColorClass(card.suit)}`}>
                                                         {card.rank}<br />
-                                                        <span className="text-base">{getSuitSymbol(card.suit)}</span>
+                                                        <span className="text-sm md:text-base">{getSuitSymbol(card.suit)}</span>
                                                     </div>
                                                 </div>
                                             )}
@@ -468,13 +562,13 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                                 </div>
 
                                 {/* Middle Action Bar */}
-                                <div className="h-24 bg-zinc-900/80 backdrop-blur-md border-t border-zinc-800 flex items-center justify-between px-8 relative">
+                                <div className="bg-zinc-900/80 backdrop-blur-md border-t border-zinc-800 flex items-center justify-between px-3 md:px-8 py-3 md:py-4 relative min-h-[6rem]">
 
                                     {/* Return chip button (left) */}
                                     {myCurrentChip !== null && (
                                         <button
                                             onClick={handleReturnChip}
-                                            className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 font-bold text-[10px] uppercase tracking-widest rounded-lg transition-all text-zinc-400 hover:text-white"
+                                            className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 font-bold text-xs md:text-sm uppercase tracking-widest rounded-lg transition-all text-zinc-400 hover:text-white"
                                         >
                                             Return ✕
                                         </button>
@@ -484,11 +578,11 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                                     {/* Active Selection Display (center) */}
                                     <div className="absolute left-1/2 -translate-x-1/2 w-16 h-16 rounded-full border-4 border-dashed border-zinc-700 flex items-center justify-center">
                                         {(selectedChip ?? myCurrentChip) !== null ? (
-                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-black shadow-[0_0_20px_rgba(220,38,38,0.5)] ${currentChipColor}`}>
+                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg md:text-xl font-black shadow-[0_0_20px_rgba(220,38,38,0.5)] ${currentChipColor}`}>
                                                 {selectedChip ?? myCurrentChip}
                                             </div>
                                         ) : (
-                                            <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-600 text-xs font-bold">
+                                            <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-600 text-sm font-bold">
                                                 ?
                                             </div>
                                         )}
@@ -499,7 +593,7 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                                         <button
                                             onClick={handleConfirmChip}
                                             disabled={selectedChip === null}
-                                            className="px-4 py-2 bg-green-700 hover:bg-green-600 font-black text-[10px] uppercase tracking-widest rounded-lg transition-all shadow-[0_0_12px_rgba(22,163,74,0.3)] disabled:opacity-40 disabled:cursor-not-allowed"
+                                            className="px-5 py-2.5 bg-green-700 hover:bg-green-600 font-black text-xs md:text-sm uppercase tracking-widest rounded-lg transition-all shadow-[0_0_12px_rgba(22,163,74,0.3)] disabled:opacity-40 disabled:cursor-not-allowed"
                                         >
                                             Confirm ▶
                                         </button>
@@ -507,17 +601,17 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                                 </div>
 
                                 {/* Bottom Player Area */}
-                                <div className="h-48 bg-zinc-950 flex flex-col justify-end p-8 relative">
+                                <div className="bg-zinc-950 border-t border-zinc-900 p-4 md:p-6 space-y-4">
 
                                     {/* Chip Pool */}
-                                    <div className="absolute left-8 -top-24">
-                                        <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Available Chips</div>
+                                    <div>
+                                        <div className="text-xs font-bold text-zinc-600 uppercase tracking-widest mb-2">Available Chips</div>
                                         <div className="flex gap-3 flex-wrap">
                                             {roundChips.map((chip) => (
                                                 <button
                                                     key={chip}
                                                     onClick={() => handleChipSelect(chip)}
-                                                    className={`w-12 h-12 rounded-full border-2 flex items-center justify-center text-sm font-black transition-all hover:scale-110 active:scale-90 ${selectedChip === chip
+                                                    className={`w-12 h-12 md:w-14 md:h-14 rounded-full border-2 flex items-center justify-center text-base font-black transition-all hover:scale-110 active:scale-90 ${selectedChip === chip
                                                         ? "border-yellow-400 ring-2 ring-yellow-400/50 " + currentChipColor
                                                         : "border-transparent " + currentChipColor
                                                         }`}
@@ -529,18 +623,18 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                                     </div>
 
                                     {/* Hand Cards */}
-                                    <div className="flex justify-center gap-2 -mb-20">
+                                    <div className="flex justify-center gap-2 md:gap-3 flex-wrap">
                                         {myCards.map((card, idx) => (
-                                            <div key={idx} className={`w-24 h-36 ${activeCardSkin.surfaceClass} rounded-lg shadow-2xl transition-all hover:-translate-y-8 cursor-pointer relative overflow-hidden group`}>
-                                                <div className={`p-2 h-full flex flex-col justify-between ${activeCardSkin.textClass} font-black italic`}>
-                                                    <div className={`text-base leading-none ${getSuitColorClass(card.suit)}`}>
+                                            <div key={idx} className={`w-[5rem] h-[7.5rem] sm:w-[5.5rem] sm:h-[8.5rem] md:w-[6.5rem] md:h-[9.5rem] lg:w-24 lg:h-36 ${activeCardSkin.surfaceClass} rounded-lg shadow-2xl transition-all hover:-translate-y-5 cursor-pointer relative overflow-hidden group active:scale-95`}>
+                                                <div className={`p-1.5 md:p-2 h-full flex flex-col justify-between ${activeCardSkin.textClass} font-black italic`}>
+                                                    <div className={`text-sm md:text-base leading-none ${getSuitColorClass(card.suit)}`}>
                                                         {card.rank}<br />
-                                                        <span className="text-xs">{getSuitSymbol(card.suit)}</span>
+                                                        <span className="text-[11px] md:text-xs">{getSuitSymbol(card.suit)}</span>
                                                     </div>
                                                     {renderCardPattern(card)}
-                                                    <div className={`text-base leading-none self-end rotate-180 ${getSuitColorClass(card.suit)}`}>
+                                                    <div className={`text-sm md:text-base leading-none self-end rotate-180 ${getSuitColorClass(card.suit)}`}>
                                                         {card.rank}<br />
-                                                        <span className="text-xs">{getSuitSymbol(card.suit)}</span>
+                                                        <span className="text-[11px] md:text-xs">{getSuitSymbol(card.suit)}</span>
                                                     </div>
                                                 </div>
                                                 <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
@@ -553,10 +647,100 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                         </div>
                     </main>
 
-                    <ChatBox className="w-80" joinCode={joinCode} />
+                    {/* Chat sidebar — only on 2xl+ */}
+                    <div className="hidden 2xl:block w-80 shrink-0 min-h-0">
+                        <ChatBox className="w-full h-full" joinCode={joinCode} />
+                    </div>
 
                 </div>
             </div>
+
+            {/* Chat overlay for < 2xl screens — always mounted to preserve messages */}
+            <div className={`fixed inset-0 z-[100] 2xl:hidden transition-opacity duration-200 ${isGameChatOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+                <button
+                    type="button"
+                    aria-label="Close chat"
+                    onClick={() => setIsGameChatOpen(false)}
+                    className="absolute inset-0 bg-black/70"
+                />
+                <aside className={`absolute right-0 top-0 h-full w-[min(92vw,26rem)] bg-zinc-950 border-l border-zinc-800 shadow-2xl flex flex-col transition-transform duration-200 ${isGameChatOpen ? "translate-x-0" : "translate-x-full"}`}>
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
+                        <span className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">Comms Channel</span>
+                        <button
+                            type="button"
+                            onClick={() => setIsGameChatOpen(false)}
+                            className="px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:text-white text-xs font-bold uppercase tracking-wider"
+                        >
+                            Close
+                        </button>
+                    </div>
+                    <ChatBox className="flex-1 border-0 rounded-none" joinCode={joinCode} />
+                </aside>
+            </div>
+
+            {/* Sidebar overlay for < lg screens */}
+            {isSidebarOpen && (
+                <div className="fixed inset-0 z-[90] lg:hidden">
+                    <button
+                        type="button"
+                        aria-label="Close sidebar"
+                        onClick={() => setIsSidebarOpen(false)}
+                        className="absolute inset-0 bg-black/70"
+                    />
+                    <aside className="absolute left-0 top-0 h-full w-[min(85vw,20rem)] bg-zinc-950 border-r border-zinc-800 shadow-2xl flex flex-col">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
+                            <span className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">Player Logistics</span>
+                            <button
+                                type="button"
+                                onClick={() => setIsSidebarOpen(false)}
+                                className="px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:text-white text-xs font-bold uppercase tracking-wider"
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {players.map(p => (
+                                <div key={p.id} className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/50">
+                                    <div className="text-sm font-bold truncate mb-3 flex items-center gap-2">
+                                        <span
+                                            title={lobbyPlayers.find((player) => player.id === p.id)?.isConnected === false ? "Disconnected" : "Connected"}
+                                            className={`inline-block w-2.5 h-2.5 rounded-full ${lobbyPlayers.find((player) => player.id === p.id)?.isConnected === false ? "bg-red-500" : "bg-green-500"}`}
+                                        />
+                                        {p.name}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {chipColors.map((color) => {
+                                            const chip = p.chips[color];
+                                            const colorStyles: Record<string, string> = {
+                                                white: "bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.5)]",
+                                                yellow: "bg-yellow-400 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]",
+                                                orange: "bg-orange-500 text-white shadow-[0_0_10px_rgba(249,115,22,0.5)]",
+                                                red: "bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.5)]",
+                                            };
+                                            const style = chip !== null ? colorStyles[color] : "bg-transparent border-dashed";
+                                            return (
+                                                <div
+                                                    key={color}
+                                                    className={`w-10 h-10 rounded-full border border-zinc-800 flex items-center justify-center text-xs font-bold ${style}`}
+                                                >
+                                                    {chip ?? ""}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </aside>
+                </div>
+            )}
+
+            {/* Game error toast */}
+            {gameError && (
+                <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[110] px-6 py-3 bg-red-900/90 border border-red-700 rounded-xl text-sm font-bold text-red-200 shadow-2xl animate-pulse">
+                    {gameError}
+                </div>
+            )}
 
             {/* HEIST RESULT / SHOWDOWN OVERLAY */}
             {showShowdown && heistResult && (
@@ -585,12 +769,12 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
                         </button>
                     </header>
 
-                    <div className="flex-1 grid gap-3 items-stretch" style={{ gridTemplateColumns: `repeat(${heistResult.orderedShowdown.length}, 1fr)` }}>
+                    <div className="flex-1 flex gap-3 overflow-x-auto items-stretch">
                         {heistResult.orderedShowdown.map((p, idx) => {
                             const revealed = idx < revealedCount;
                             const isLast = idx === heistResult.orderedShowdown.length - 1;
                             return (
-                                <div key={p.playerId} className="relative" style={{ perspective: '800px' }}>
+                                <div key={p.playerId} className="relative min-w-[220px] md:min-w-[240px] flex-1" style={{ perspective: '800px' }}>
                                     <div
                                         className="w-full h-full transition-transform duration-700 ease-out"
                                         style={{
@@ -660,7 +844,7 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
             {/* Leave Game Button */}
             <button
                 onClick={onLeave}
-                className="fixed bottom-4 right-4 z-40 px-3 py-1 bg-zinc-800 text-[8px] font-bold text-zinc-500 rounded uppercase tracking-widest hover:text-red-500 transition-colors"
+                className="fixed bottom-4 right-4 z-40 px-4 py-2 bg-zinc-800 text-xs font-bold text-zinc-400 rounded uppercase tracking-widest hover:text-red-500 transition-colors"
             >
                 Leave Game
             </button>

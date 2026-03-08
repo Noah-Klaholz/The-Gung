@@ -83,8 +83,8 @@ export default function ChatBox({
     <section
       className={`bg-zinc-950 rounded-3xl border border-zinc-800 shadow-2xl flex flex-col overflow-hidden ${className ?? ""}`}
     >
-      <div className="h-16 bg-zinc-900 border-b border-zinc-800 flex items-center px-6">
-        <span className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">
+      <div className="h-14 md:h-16 bg-zinc-900 border-b border-zinc-800 flex items-center px-6">
+        <span className="text-xs md:text-sm font-black uppercase tracking-[0.2em] text-zinc-400">
           {title}
         </span>
         {showStatusIndicator && (
@@ -92,13 +92,13 @@ export default function ChatBox({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col">
+      <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 md:space-y-4 flex flex-col">
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className="bg-zinc-800 px-3 py-2 rounded-lg text-xs text-white"
+            className="bg-zinc-800 px-3 py-2 rounded-lg text-sm md:text-xs lg:text-sm text-white"
           >
-            <div className="text-zinc-400 text-[10px] uppercase tracking-wider mb-1">
+            <div className="text-zinc-400 text-xs md:text-[10px] uppercase tracking-wider mb-1">
               {msg.sender}
             </div>
             {msg.text}
@@ -106,7 +106,7 @@ export default function ChatBox({
         ))}
       </div>
 
-      <div className="p-4 bg-zinc-900/50 border-t border-zinc-800">
+      <div className="p-3 md:p-4 bg-zinc-900/50 border-t border-zinc-800">
         <form
           className="relative flex items-center"
           onSubmit={handleChatSubmit}
@@ -116,7 +116,7 @@ export default function ChatBox({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder={placeholder}
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-zinc-600 transition-colors"
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm md:text-xs lg:text-sm focus:outline-none focus:border-zinc-600 transition-colors"
           />
           <button
             type="submit"

@@ -5,7 +5,15 @@ import { socket } from "../lib/socket";
 import { usePlayer, Player } from "../lib/context/playerContext";
 import Game from "./components/Game";
 import ChatBox from "./components/ChatBox";
+import Settings from "./components/Settings";
 import { AudioManager } from "../lib/Audio/AudioManager"
+import {
+  DEFAULT_APP_SETTINGS,
+  loadAppSettings,
+  saveAppSettings,
+  type AppSettings,
+  type AudioSettings,
+} from "../lib/settings";
 import {
   CARD_SKINS,
   DEFAULT_CARD_SKIN,
@@ -34,8 +42,27 @@ export default function RootPage() {
   const [isLobbyChatOpen, setIsLobbyChatOpen] = useState(false);
   const [cardSkin, setCardSkin] = useState<CardSkin>(DEFAULT_CARD_SKIN);
   const [tableSkin, setTableSkin] = useState<TableSkin>(DEFAULT_TABLE_SKIN);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
 
   const audio = AudioManager.getInstance();
+
+  const applyAudioSettings = (audioSettings: AudioSettings) => {
+    audio.setMasterVolume(audioSettings.master);
+    audio.setMusicVolume(audioSettings.music);
+    audio.setSfxVolume(audioSettings.sfx);
+  };
+
+  const handleAudioSettingsChange = (nextAudio: AudioSettings) => {
+    const nextSettings: AppSettings = {
+      ...settings,
+      audio: nextAudio,
+    };
+
+    setSettings(nextSettings);
+    saveAppSettings(nextSettings);
+    applyAudioSettings(nextAudio);
+  };
 
   const resolvePlayerName = () => {
     const storedName = localStorage.getItem("playerName")?.trim();
@@ -62,6 +89,10 @@ export default function RootPage() {
     if (storedTableSkin && isTableSkin(storedTableSkin)) {
       setTableSkin(storedTableSkin);
     }
+
+    const loadedSettings = loadAppSettings();
+    setSettings(loadedSettings);
+    applyAudioSettings(loadedSettings.audio);
 
     // Persistent device ID
     let savedId = localStorage.getItem("the-gang-device-id");
@@ -302,8 +333,8 @@ export default function RootPage() {
   );
 
   const renderWaitingRoomView = () => (
-    <div className="w-full max-w-6xl flex flex-col lg:flex-row gap-4 lg:items-start">
-      <div className="w-full max-w-md mx-auto lg:mx-0 lg:flex-1 space-y-4">
+    <div className="w-full max-w-7xl flex flex-col xl:flex-row gap-4 xl:items-start min-h-0">
+      <div className="w-full max-w-2xl mx-auto xl:mx-0 xl:flex-1 space-y-4">
         <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg p-2 shadow-lg">
           <button
             onClick={handleCopyCode}
@@ -443,22 +474,33 @@ export default function RootPage() {
 
         <button
           onClick={() => setIsLobbyChatOpen((prev) => !prev)}
-          className="lg:hidden w-full py-2 px-4 bg-neutral-900 border border-neutral-800 text-neutral-300 font-semibold rounded-lg hover:text-white transition-colors uppercase tracking-widest text-xs"
+          className="xl:hidden w-full py-2 px-4 bg-neutral-900 border border-neutral-800 text-neutral-300 font-semibold rounded-lg hover:text-white transition-colors uppercase tracking-widest text-xs"
         >
           {isLobbyChatOpen ? "Hide Chat" : "Show Chat"}
         </button>
       </div>
 
-      <div className="w-full lg:w-80 lg:shrink-0">
-        <div className={`${isLobbyChatOpen ? "block" : "hidden"} lg:block`}>
-          <ChatBox className="w-full h-[36rem]" joinCode={activeJoinCode ?? undefined} />
+      <div className="w-full xl:w-80 xl:shrink-0">
+        <div className={`${isLobbyChatOpen ? "block" : "hidden"} xl:block`}>
+          <ChatBox className="w-full h-[20rem] md:h-[24rem] xl:h-[36rem]" joinCode={activeJoinCode ?? undefined} />
         </div>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center font-sans relative p-4">
+    <div className="app-shell min-h-[100dvh] bg-black flex items-center justify-center font-sans relative">
+      {currentView !== "GAME" && (
+        <button
+          type="button"
+          onClick={() => setIsSettingsOpen(true)}
+          className="fixed top-4 right-4 z-50 px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-lg text-xs md:text-sm font-bold uppercase tracking-wider text-neutral-200 hover:text-white"
+          aria-label="Open settings"
+        >
+          Settings
+        </button>
+      )}
+
       {currentView === "LOGIN" && renderLoginView()}
       {currentView === "SELECTION" && renderSelectionView()}
       {currentView === "WAITING_ROOM" && renderWaitingRoomView()}
@@ -467,10 +509,18 @@ export default function RootPage() {
           playerId={playerId}
           joinCode={activeJoinCode}
           onLeave={handleLeaveLobby}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           cardSkin={cardSkin}
           tableSkin={tableSkin}
         />
       )}
+
+      <Settings
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        audio={settings.audio}
+        onAudioChange={handleAudioSettingsChange}
+      />
     </div>
   );
 }
