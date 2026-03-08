@@ -5,6 +5,7 @@ import ChatBox from "./ChatBox";
 import { socket } from "../../lib/socket";
 import { CARD_SKINS, TABLE_SKINS, type CardSkin, type TableSkin } from "../../lib/skins";
 import { usePlayer } from "../../lib/context/playerContext";
+import { AudioManager } from "../../lib/Audio/AudioManager"
 
 interface Card {
     rank: string;
@@ -84,6 +85,18 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
     // Game over state
     const [gameOver, setGameOver] = useState<{ won: boolean; successes: number; failures: number } | null>(null);
 
+
+    // Game music
+    useEffect(() => {
+        const audio = AudioManager.getInstance();   
+        audio.play("/audio/music/gameMusic.mp3");
+
+        return () => {
+            audio.stopSound("/audio/music/gameMusic.mp3");
+        };
+
+    }, []);
+
     // Socket listeners
     useEffect(() => {
         const handleGameUpdate = (data: any) => {
@@ -148,6 +161,10 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
             return;
         }
 
+        const audio = AudioManager.getInstance();
+        audio.setPausedByUrl("/audio/music/gameMusic.mp3", true);
+        audio.play("/audio/sfx/reveal.mp3");
+
         setRevealedCount(0);
         setRevealPhase("intro");
         setResultBurst(null);
@@ -167,6 +184,8 @@ export default function Game({ playerId, joinCode, onLeave, cardSkin, tableSkin 
 
                 if (i >= total) {
                     if (revealInterval) clearInterval(revealInterval);
+
+                    audio.setPausedByUrl("/audio/music/gameMusic.mp3", false);
 
                     const impactTimer = setTimeout(() => {
                         setRevealPhase("impact");
