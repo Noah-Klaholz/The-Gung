@@ -34,6 +34,11 @@ export const TABLE_SKINS = {
     backgroundGradientClass: "from-cyan-900/70 via-zinc-950",
     auraClass: "bg-[radial-gradient(circle_at_center,_rgba(6,182,212,0.22)_0%,_transparent_70%)]",
   },
+  purple: {
+    label: "Purple Flame",
+    backgroundGradientClass: "from-purple-900/70 via-zinc-950",
+    auraClass: "bg-[radial-gradient(circle_at_center,_rgba(6,182,212,0.22)_0%,_transparent_70%)]",
+  },
 } as const satisfies Record<string, TableSkinDefinition>;
 
 // Neue Card-Skins: Jeder Eintrag braucht exakt diese Pflichtfelder:
@@ -71,6 +76,15 @@ export const CARD_SKINS = {
     backClass: "bg-cyan-950/80 border border-cyan-500/50",
     suitRedClass: "text-fuchsia-600",
     suitBlackClass: "text-cyan-950",
+  },
+  purple: {
+    label: "Purple",
+    surfaceClass: "bg-purple-50 border border-purple-300/60",
+    textClass: "text-purple-950",
+    placeholderClass: "bg-zinc-900 border-2 border-dashed border-cyan-800/80 scale-95",
+    backClass: "bg-purple-950/80 border border-purple-500/50",
+    suitRedClass: "text-yellow-600",
+    suitBlackClass: "text-purple-950",
   },
 } as const satisfies Record<string, CardSkinDefinition>;
 
