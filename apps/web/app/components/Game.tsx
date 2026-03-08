@@ -86,6 +86,7 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
     const [isGameChatOpen, setIsGameChatOpen] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [gameError, setGameError] = useState<string | null>(null);
+    const [isConnected, setIsConnected] = useState(socket.connected);
     const handRankPopoverRef = useRef<HTMLDivElement | null>(null);
     const prevPhaseRef = useRef("PRE-FLOP");
 
@@ -161,13 +162,20 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
         };
     }, [joinCode, playerId]);
 
-    // Re-request game state on socket reconnection
+    // Track connection state & re-request game state on reconnection
     useEffect(() => {
-        const handleReconnect = () => {
+        const onConnect = () => {
+            setIsConnected(true);
             socket.emit("REQUEST_GAME_STATE", { joinCode });
         };
-        socket.on("connect", handleReconnect);
-        return () => { socket.off("connect", handleReconnect); };
+        const onDisconnect = () => setIsConnected(false);
+        socket.on("connect", onConnect);
+        socket.on("disconnect", onDisconnect);
+        setIsConnected(socket.connected);
+        return () => {
+            socket.off("connect", onConnect);
+            socket.off("disconnect", onDisconnect);
+        };
     }, [joinCode]);
 
     // Show game errors (chip action failures etc.)
@@ -257,6 +265,10 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
 
     const handleConfirmChip = () => {
         if (selectedChip === null) return;
+        if (!socket.connected) {
+            setGameError("Not connected to server — reconnecting…");
+            return;
+        }
         socket.emit("CHIP_ACTION", {
             joinCode,
             playerId,
@@ -266,6 +278,10 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
     };
 
     const handleReturnChip = () => {
+        if (!socket.connected) {
+            setGameError("Not connected to server — reconnecting…");
+            return;
+        }
         socket.emit("CHIP_ACTION", {
             joinCode,
             playerId,
@@ -274,6 +290,10 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
     };
 
     const handleTakePlayerChip = (fromPlayerId: string) => {
+        if (!socket.connected) {
+            setGameError("Not connected to server — reconnecting…");
+            return;
+        }
         socket.emit("CHIP_ACTION", {
             joinCode,
             playerId,
@@ -380,6 +400,10 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
                         <div className="text-2xl md:text-3xl font-black bg-gradient-to-r from-red-500 via-yellow-500 to-orange-500 bg-clip-text text-transparent tracking-tighter italic">
                             THE GUNG
                         </div>
+                        <span
+                            title={isConnected ? "Connected" : "Disconnected"}
+                            className={`w-2.5 h-2.5 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500 animate-pulse"}`}
+                        />
                     </div>
                     <button
                         onClick={() => setIsGameChatOpen((prev) => !prev)}
@@ -631,30 +655,28 @@ export default function Game({ playerId, joinCode, onLeave, onOpenSettings, card
                 </div>
             </div>
 
-            {/* Chat overlay for < 2xl screens */}
-            {isGameChatOpen && (
-                <div className="fixed inset-0 z-[100] 2xl:hidden">
-                    <button
-                        type="button"
-                        aria-label="Close chat"
-                        onClick={() => setIsGameChatOpen(false)}
-                        className="absolute inset-0 bg-black/70"
-                    />
-                    <aside className="absolute right-0 top-0 h-full w-[min(92vw,26rem)] bg-zinc-950 border-l border-zinc-800 shadow-2xl flex flex-col">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
-                            <span className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">Comms Channel</span>
-                            <button
-                                type="button"
-                                onClick={() => setIsGameChatOpen(false)}
-                                className="px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:text-white text-xs font-bold uppercase tracking-wider"
-                            >
-                                Close
-                            </button>
-                        </div>
-                        <ChatBox className="flex-1 border-0 rounded-none" joinCode={joinCode} />
-                    </aside>
-                </div>
-            )}
+            {/* Chat overlay for < 2xl screens — always mounted to preserve messages */}
+            <div className={`fixed inset-0 z-[100] 2xl:hidden transition-opacity duration-200 ${isGameChatOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+                <button
+                    type="button"
+                    aria-label="Close chat"
+                    onClick={() => setIsGameChatOpen(false)}
+                    className="absolute inset-0 bg-black/70"
+                />
+                <aside className={`absolute right-0 top-0 h-full w-[min(92vw,26rem)] bg-zinc-950 border-l border-zinc-800 shadow-2xl flex flex-col transition-transform duration-200 ${isGameChatOpen ? "translate-x-0" : "translate-x-full"}`}>
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
+                        <span className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">Comms Channel</span>
+                        <button
+                            type="button"
+                            onClick={() => setIsGameChatOpen(false)}
+                            className="px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:text-white text-xs font-bold uppercase tracking-wider"
+                        >
+                            Close
+                        </button>
+                    </div>
+                    <ChatBox className="flex-1 border-0 rounded-none" joinCode={joinCode} />
+                </aside>
+            </div>
 
             {/* Sidebar overlay for < lg screens */}
             {isSidebarOpen && (
